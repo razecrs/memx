@@ -29,6 +29,8 @@ typedef uintptr_t memx_region_t;
 #define MEMX_DESCRIPTOR_UNIFORM_TAG ((uintptr_t)1U)
 #define MEMX_DESCRIPTOR_DENSE_TAG ((uintptr_t)2U)
 #define MEMX_INLINE_HANDLE_MAX (UINTPTR_MAX >> 2U)
+#define MEMX_INTERNAL_ALIGNMENT                                             \
+    ((_Alignof(uintptr_t) > 4U) ? _Alignof(uintptr_t) : 4U)
 
 typedef struct memx_sparse_leaf {
     memx_region_t regions[1];
@@ -62,6 +64,13 @@ struct memx_index {
     size_t overlay_private_bytes;
 };
 
+_Static_assert(_Alignof(memx_dense_region_t) <= MEMX_INTERNAL_ALIGNMENT,
+    "dense regions must satisfy the allocator alignment contract");
+_Static_assert(_Alignof(memx_sparse_leaf_t) <= MEMX_INTERNAL_ALIGNMENT,
+    "sparse leaves must satisfy the allocator alignment contract");
+_Static_assert(_Alignof(memx_index_t) <= MEMX_INTERNAL_ALIGNMENT,
+    "indexes must satisfy the allocator alignment contract");
+
 static void *
 memx_default_allocate(void *context, size_t size) {
     (void)context;
@@ -79,7 +88,7 @@ memx_allocate(const memx_index_t *index, size_t size) {
     void *pointer = index->config.allocator.allocate(
         index->config.allocator.context, size);
     if (pointer != NULL
-        && ((uintptr_t)pointer % (uintptr_t)_Alignof(max_align_t)) != 0U) {
+        && ((uintptr_t)pointer % (uintptr_t)MEMX_INTERNAL_ALIGNMENT) != 0U) {
         index->config.allocator.deallocate(
             index->config.allocator.context, pointer);
         return NULL;
@@ -336,7 +345,7 @@ memx_index_create(const memx_config_t *input, memx_index_t **out_index) {
     if (index == NULL) {
         return MEMX_ERROR_OUT_OF_MEMORY;
     }
-    if (((uintptr_t)index % (uintptr_t)_Alignof(max_align_t)) != 0U) {
+    if (((uintptr_t)index % (uintptr_t)MEMX_INTERNAL_ALIGNMENT) != 0U) {
         config.allocator.deallocate(config.allocator.context, index);
         return MEMX_ERROR_OUT_OF_MEMORY;
     }

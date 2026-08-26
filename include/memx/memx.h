@@ -68,9 +68,13 @@ typedef enum memx_storage_mode {
 } memx_storage_mode_t;
 
 /*
- * The allocator must provide malloc-equivalent alignment: every non-NULL
- * result is suitably aligned for max_align_t. A callback that violates this
- * contract is treated as an allocation failure rather than dereferenced.
+ * Every non-NULL allocator result must be aligned to at least
+ * max(_Alignof(uintptr_t), 4). The native-word alignment covers all v0
+ * internal objects and the four-byte minimum reserves two descriptor tag
+ * bits. A callback that violates this contract is treated as an allocation
+ * failure rather than dereferenced. Requiring max_align_t here would be
+ * unnecessarily strict: some conforming platform allocators use smaller
+ * alignments for small allocations.
  */
 typedef void *(*memx_allocate_fn)(void *context, size_t size);
 typedef void (*memx_deallocate_fn)(void *context, void *pointer);
