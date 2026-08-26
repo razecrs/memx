@@ -1,0 +1,3 @@
+result,case,candidate,baseline,latency_ratio,latency_limit,memory_ratio,memory_limit
+PASS,uniform-d0-r256-rs21-gs12,memx_overlay_trusted,flat_assume_mapped,0.753251,1.100000,0.007782,0.500000
+PASS,random-d100-r256-rs21-gs12,memx_flat_fallback,flat_assume_mapped,0.974340,1.150000,1.000000,1.020000

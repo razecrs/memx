@@ -1,0 +1,19 @@
+# Out-of-tree CMake and generated build directories are published as release
+# assets, not committed as source.
+/build*/
+
+# Local prior-art checkouts retain their own Git histories. Reproducible commit
+# identifiers live in the project evidence; clean snapshots are release assets.
+/research/
+
+# Python bytecode is generated from the checked-in tooling.
+__pycache__/
+*.py[cod]
+
+# Editor, OS, and profiling artifacts.
+*.swp
+*.swo
+*.profraw
+*.profdata
+perf.data*
+.DS_Store

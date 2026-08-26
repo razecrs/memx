@@ -1,0 +1,165 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-26",
+  "claim_level": "single-host diagnostic allocator workload",
+  "conclusion": {
+    "winner_by_median_ns_per_operation": "mimalloc",
+    "memx_heap_rank": 4,
+    "allocator_count": 6,
+    "memx_heap_is_competitive_on_this_workload": true,
+    "primary_observed_memx_bottleneck": "small-object metadata/cache traffic; mimalloc remains approximately three times faster on this trace",
+    "optimization_history": {
+      "before_median_ns_per_operation": 2371.424,
+      "after_median_ns_per_operation": 180.734,
+      "speedup_ratio": 13.121073,
+      "retained_changes": [
+        "4096- and 8192-byte span classes",
+        "in-place realloc within existing capacity",
+        "explicit unchecked conventional realloc/free paths",
+        "activity statistics disabled by default",
+        "16-byte small-object header on x86-64 with in-span metadata",
+        "128-object default refill batch"
+      ]
+    },
+    "warning": "This result is deliberately not an allocator superiority claim. CPU frequency was not locked, RSS and fragmentation were not measured, and only one deterministic single-thread trace and one host were tested. The primary MemX series uses its conventional unchecked realloc/free contract and disabled activity counters; a separate checked-API sensitivity series is reported below."
+  },
+  "host": {
+    "os": "Fedora Linux 44",
+    "kernel": "7.1.9-200.fc44.x86_64",
+    "architecture": "x86_64",
+    "cpu": "Intel Core i7-9750H",
+    "logical_cpus": 12,
+    "pinned_cpu": 2,
+    "pinned_cpu_physical_core": 2,
+    "compiler": "GCC 16.2.1 20260819 (Red Hat 16.2.1-2)",
+    "frequency_locked": false
+  },
+  "method": {
+    "source": "bench/allocator_workload.c",
+    "slots": 100000,
+    "rounds_per_run": 3,
+    "operations_per_run": 675268,
+    "accepted_checksum": 2887,
+    "timed_runs_per_allocator": 15,
+    "warmup_runs_per_allocator": 1,
+    "ordering": "cyclic interleave; starting allocator rotated once per repetition",
+    "affinity_command": "taskset -c 2",
+    "sizes_bytes": [16, 24, 32, 48, 64, 96, 128, 192, 256, 512, 1024, 2048, 4096, 8192],
+    "workload": "allocate and write all live slots, shuffle, realloc approximately 25 percent, write, then free",
+    "memx_primary_api_contract": "memx_heap_malloc plus memx_heap_realloc_unchecked and memx_heap_free_unchecked; pointers are valid live base pointers, matching the workload's conventional allocator contract; activity statistics disabled",
+    "memx_sensitivity_api_contract": "memx_heap_malloc plus checked memx_heap_realloc and memx_heap_free; activity statistics disabled",
+    "statistic": "median; MAD is median absolute deviation from the median",
+    "integrity": "all 90 primary timed runs and all 15 checked-sensitivity runs completed 675268 operations and returned checksum 2887"
+  },
+  "provenance": {
+    "glibc": {
+      "version": "2.43-8.fc44",
+      "integration": "default process allocator"
+    },
+    "jemalloc": {
+      "version": "5.3.0-14.fc44",
+      "binary": "/lib64/libjemalloc.so.2",
+      "binary_sha256": "93026c1c06c77f91ce86ceda41ba40820138aa5b3f76381877bfd1e126f469fc",
+      "integration": "LD_PRELOAD",
+      "research_checkout_commit_not_used_for_binary": "e36a0fa5bc1e1090362505ac4af4408466ba5163"
+    },
+    "mimalloc": {
+      "commit": "cd69707c3ca01a4c5fb358e8b92a710554f15356",
+      "binary": "/tmp/memx-build-mimalloc/libmimalloc.so.3.5",
+      "binary_sha256": "d773210ba939d934defb2c93c8749f3622240b96a868d96fa4e91f95bd131281",
+      "integration": "LD_PRELOAD"
+    },
+    "snmalloc": {
+      "commit": "a5f10eb6c048fc32bca2383daa8d6acbf82cfb7f",
+      "binary": "/tmp/memx-build-snmalloc2/libsnmallocshim.so",
+      "binary_sha256": "f9125c989cd2eb9c7b40153eab5f67cbf678c4c2eabb7f070fe139532298d485",
+      "integration": "LD_PRELOAD"
+    },
+    "tcmalloc": {
+      "commit": "ea99e09225e4f518d3e201f2e9c33ea2f85d0413",
+      "binary": "/tmp/tcmalloc-allocator-workload",
+      "binary_sha256": "a143a67c4edafd742066b6a24a75b62f1eaabcb93db6951a7cac9f742fe46bfa",
+      "integration": "statically linked workload executable"
+    },
+    "memx_heap": {
+      "version": "working tree on 2026-08-26",
+      "binary": "build-release/memx_heap_workload",
+      "binary_sha256": "1c5692391582c39944600dff82e7a6fca14730f613d99d3ac0677017a84d779b",
+      "checked_sensitivity_binary": "build-release/memx_heap_workload_checked",
+      "checked_sensitivity_binary_sha256": "46f099a21f863bc5abb77d17db599eb8896caacc85a609da39d4cecda5b4fec7",
+      "integration": "direct memx_heap API backend compiled from the same workload source",
+      "allocator_api_and_implementation_physical_c_h_lines": 1234
+    },
+    "system_workload_binary": {
+      "binary": "build-release/memx_allocator_workload",
+      "binary_sha256": "4332fffed56f0ba669679cae1cc0d472c67c7be0a44b7a95344bea6a856649a3"
+    }
+  },
+  "results": {
+    "mimalloc": {
+      "median_ns_per_operation": 62.392,
+      "mad_ns_per_operation": 0.775,
+      "min_ns_per_operation": 61.233,
+      "max_ns_per_operation": 64.162,
+      "memx_over_competitor_median_ratio": 2.896750,
+      "raw_ns_per_operation": [62.858, 62.545, 62.472, 61.617, 63.447, 61.336, 64.162, 62.392, 62.181, 61.822, 63.427, 61.871, 64.083, 61.233, 61.273]
+    },
+    "jemalloc": {
+      "median_ns_per_operation": 191.131,
+      "mad_ns_per_operation": 0.846,
+      "min_ns_per_operation": 187.891,
+      "max_ns_per_operation": 198.623,
+      "memx_over_competitor_median_ratio": 0.945603,
+      "raw_ns_per_operation": [198.623, 191.031, 187.891, 193.992, 195.021, 191.131, 190.674, 192.580, 190.285, 198.075, 190.764, 191.023, 191.297, 192.854, 190.628]
+    },
+    "tcmalloc": {
+      "median_ns_per_operation": 175.146,
+      "mad_ns_per_operation": 0.744,
+      "min_ns_per_operation": 173.129,
+      "max_ns_per_operation": 176.206,
+      "memx_over_competitor_median_ratio": 1.031905,
+      "raw_ns_per_operation": [176.206, 174.280, 174.240, 176.075, 173.129, 175.610, 174.933, 174.862, 174.982, 175.146, 173.133, 175.452, 175.890, 175.775, 175.929]
+    },
+    "snmalloc": {
+      "median_ns_per_operation": 156.207,
+      "mad_ns_per_operation": 1.101,
+      "min_ns_per_operation": 155.008,
+      "max_ns_per_operation": 159.293,
+      "memx_over_competitor_median_ratio": 1.157016,
+      "raw_ns_per_operation": [156.771, 158.846, 155.106, 158.988, 155.733, 159.293, 157.466, 155.013, 155.169, 155.540, 156.207, 155.869, 156.996, 155.008, 157.557]
+    },
+    "glibc": {
+      "median_ns_per_operation": 287.712,
+      "mad_ns_per_operation": 1.570,
+      "min_ns_per_operation": 283.298,
+      "max_ns_per_operation": 290.991,
+      "memx_over_competitor_median_ratio": 0.628177,
+      "raw_ns_per_operation": [290.991, 283.298, 289.020, 285.475, 288.606, 287.129, 286.142, 289.088, 286.075, 289.102, 290.810, 287.712, 284.855, 289.317, 286.613]
+    },
+    "memx_heap": {
+      "median_ns_per_operation": 180.734,
+      "mad_ns_per_operation": 1.048,
+      "min_ns_per_operation": 178.574,
+      "max_ns_per_operation": 185.405,
+      "raw_ns_per_operation": [181.937, 179.753, 180.845, 179.699, 179.686, 182.578, 178.574, 181.391, 181.184, 179.336, 185.405, 178.752, 181.535, 180.734, 179.437]
+    }
+  },
+  "checked_api_sensitivity": {
+    "series": "memx_heap_checked",
+    "timed_runs": 15,
+    "median_ns_per_operation": 205.084,
+    "mad_ns_per_operation": 1.839,
+    "min_ns_per_operation": 201.080,
+    "max_ns_per_operation": 208.650,
+    "checked_over_unchecked_median_ratio": 1.134728,
+    "raw_ns_per_operation": [205.927, 208.650, 201.970, 205.084, 206.930, 201.080, 206.865, 206.923, 204.058, 205.998, 201.608, 201.629, 205.658, 204.373, 203.127]
+  },
+  "ranking_by_median_ns_per_operation": [
+    "mimalloc",
+    "snmalloc",
+    "tcmalloc",
+    "memx_heap",
+    "jemalloc",
+    "glibc"
+  ]
+}
