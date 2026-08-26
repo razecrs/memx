@@ -3,6 +3,7 @@
 #include "internal.h"
 #include "memx/memx.h"
 
+#include <assert.h>
 #include <stdatomic.h>
 #include <stdint.h>
 #include <limits.h>
@@ -12,6 +13,14 @@
 
 #define MEMX_HEAP_CLASS_COUNT 10U
 #define MEMX_HEAP_SPAN_MAGIC UINT64_C(0x6d656d787370616e)
+
+#if defined(__GNUC__) || defined(__clang__)
+#define MEMX_HEAP_NOINLINE __attribute__((noinline))
+#elif defined(_MSC_VER)
+#define MEMX_HEAP_NOINLINE __declspec(noinline)
+#else
+#define MEMX_HEAP_NOINLINE
+#endif
 
 typedef struct memx_heap_span memx_heap_span_t;
 typedef struct memx_heap_cache memx_heap_cache_t;
@@ -28,12 +37,20 @@ struct memx_heap_block {
     } fields;
 };
 
+typedef struct memx_heap_central_chunk {
+    memx_heap_block_t *next;
+    memx_heap_block_t *tail;
+} memx_heap_central_chunk_t;
+
 _Static_assert(
     _Alignof(memx_heap_block_t) >= _Alignof(max_align_t),
     "small-allocation headers must preserve max_align_t alignment");
 _Static_assert(
     sizeof(memx_heap_block_t) % _Alignof(max_align_t) == 0U,
     "small-allocation payloads must remain maximally aligned");
+_Static_assert(
+    16U >= sizeof(memx_heap_central_chunk_t),
+    "the smallest size class must hold central chunk metadata");
 
 struct memx_heap_span {
     uint64_t magic;
@@ -137,14 +154,18 @@ memx_heap_update_peak(memx_heap_t *heap, size_t current) {
 }
 
 static void
-memx_heap_add_live(memx_heap_t *heap, size_t bytes) {
+memx_heap_add_live_counted(memx_heap_t *heap, size_t bytes) {
     size_t previous;
-    if (!heap->config.collect_activity_statistics) {
-        return;
-    }
     previous = atomic_fetch_add_explicit(
         &heap->live_requested_bytes, bytes, memory_order_relaxed);
     memx_heap_update_peak(heap, previous + bytes);
+}
+
+static void
+memx_heap_add_live(memx_heap_t *heap, size_t bytes) {
+    if (heap->config.collect_activity_statistics) {
+        memx_heap_add_live_counted(heap, bytes);
+    }
 }
 
 static size_t
@@ -174,13 +195,13 @@ memx_heap_class_for_size(size_t size) {
 static memx_heap_cache_t *
 memx_heap_find_cache(memx_heap_t *heap) {
     memx_heap_cache_t *cache = memx_heap_tls_last_cache;
-    if (cache != NULL && cache->heap == heap && cache->accepting_remote) {
+    if (cache != NULL && cache->heap == heap) {
         return cache;
     }
     for (cache = memx_heap_tls_caches;
          cache != NULL;
          cache = cache->tls_next) {
-        if (cache->heap == heap && cache->accepting_remote) {
+        if (cache->heap == heap) {
             memx_heap_tls_last_cache = cache;
             return cache;
         }
@@ -188,13 +209,9 @@ memx_heap_find_cache(memx_heap_t *heap) {
     return NULL;
 }
 
-static memx_heap_cache_t *
-memx_heap_get_cache(memx_heap_t *heap) {
-    memx_heap_cache_t *cache = memx_heap_find_cache(heap);
-    if (cache != NULL) {
-        return cache;
-    }
-    cache = calloc(1U, sizeof(*cache));
+static MEMX_HEAP_NOINLINE memx_heap_cache_t *
+memx_heap_create_cache(memx_heap_t *heap) {
+    memx_heap_cache_t *cache = calloc(1U, sizeof(*cache));
     if (cache == NULL) {
         return NULL;
     }
@@ -216,25 +233,42 @@ memx_heap_get_cache(memx_heap_t *heap) {
     return cache;
 }
 
+static memx_heap_cache_t *
+memx_heap_get_cache(memx_heap_t *heap) {
+    memx_heap_cache_t *cache = memx_heap_find_cache(heap);
+    return cache == NULL ? memx_heap_create_cache(heap) : cache;
+}
+
+static void
+memx_heap_push_central_chunk_locked(
+    memx_heap_t *heap,
+    size_t class_index,
+    memx_heap_block_t *head,
+    memx_heap_block_t *tail,
+    size_t count) {
+    memx_heap_central_chunk_t *chunk;
+    assert(head != NULL);
+    assert(tail != NULL);
+    assert(count != 0U);
+#if SIZE_MAX > UINT32_MAX
+    assert(count <= (size_t)UINT32_MAX);
+#endif
+    chunk = (memx_heap_central_chunk_t *)(void *)(head + 1);
+    tail->fields.link.next = NULL;
+    chunk->next = heap->central[class_index];
+    chunk->tail = tail;
+    head->fields.requested_size = (uint32_t)count;
+    heap->central[class_index] = head;
+    heap->central_count[class_index] += count;
+}
+
 static void
 memx_heap_push_central_locked(
     memx_heap_t *heap,
     size_t class_index,
     memx_heap_block_t *block) {
-    block->fields.link.next = heap->central[class_index];
-    heap->central[class_index] = block;
-    heap->central_count[class_index] += 1U;
-}
-
-static memx_heap_block_t *
-memx_heap_pop_central_locked(memx_heap_t *heap, size_t class_index) {
-    memx_heap_block_t *block = heap->central[class_index];
-    if (block != NULL) {
-        heap->central[class_index] = block->fields.link.next;
-        heap->central_count[class_index] -= 1U;
-        block->fields.link.next = NULL;
-    }
-    return block;
+    memx_heap_push_central_chunk_locked(
+        heap, class_index, block, block, 1U);
 }
 
 static bool
@@ -246,8 +280,11 @@ memx_heap_create_span_locked(memx_heap_t *heap, size_t class_index) {
         alignment);
     size_t block_count;
     size_t index;
+    size_t chunk_count = 0U;
     unsigned char *base;
     memx_heap_span_t *span;
+    memx_heap_block_t *chunk_head = NULL;
+    memx_heap_block_t *chunk_tail = NULL;
     memx_status_t status;
 
     if (header_size == 0U || stride == 0U
@@ -284,7 +321,23 @@ memx_heap_create_span_locked(memx_heap_t *heap, size_t class_index) {
             ((unsigned char *)span->base + index * stride);
         memset(block, 0, sizeof(*block));
         atomic_init(&block->fields.state, 0U);
-        memx_heap_push_central_locked(heap, class_index, block);
+        block->fields.link.next = chunk_head;
+        chunk_head = block;
+        if (chunk_tail == NULL) {
+            chunk_tail = block;
+        }
+        chunk_count += 1U;
+        if (chunk_count == heap->config.cache_batch) {
+            memx_heap_push_central_chunk_locked(
+                heap, class_index, chunk_head, chunk_tail, chunk_count);
+            chunk_head = NULL;
+            chunk_tail = NULL;
+            chunk_count = 0U;
+        }
+    }
+    if (chunk_count != 0U) {
+        memx_heap_push_central_chunk_locked(
+            heap, class_index, chunk_head, chunk_tail, chunk_count);
     }
     heap->spans = span;
     heap->next_span += 1U;
@@ -310,35 +363,51 @@ memx_heap_drain_remote(memx_heap_cache_t *cache, size_t class_index) {
     (void)pthread_mutex_unlock(&cache->remote_lock);
 }
 
-static void
-memx_heap_flush_excess(
+static MEMX_HEAP_NOINLINE void
+memx_heap_flush_excess_slow(
     memx_heap_t *heap,
     memx_heap_cache_t *cache,
     size_t class_index) {
-    if (cache->local_count[class_index] <= heap->config.cache_limit) {
-        return;
-    }
+    memx_heap_block_t *first;
+    memx_heap_block_t *tail;
+    memx_heap_block_t *remainder;
+    size_t move_count;
+    size_t moved;
+
     (void)pthread_mutex_lock(&heap->lock);
-    while (cache->local_count[class_index]
-        > heap->config.cache_limit / 2U) {
-        memx_heap_block_t *block = cache->local[class_index];
-        if (block == NULL) {
-            break;
-        }
-        cache->local[class_index] = block->fields.link.next;
-        cache->local_count[class_index] -= 1U;
-        memx_heap_push_central_locked(heap, class_index, block);
+    first = cache->local[class_index];
+    move_count = cache->local_count[class_index]
+        - heap->config.cache_limit / 2U;
+#if SIZE_MAX > UINT32_MAX
+    if (move_count > (size_t)UINT32_MAX) {
+        move_count = (size_t)UINT32_MAX;
+    }
+#endif
+    tail = first;
+    moved = first == NULL ? 0U : 1U;
+    while (moved < move_count && tail->fields.link.next != NULL) {
+        tail = tail->fields.link.next;
+        moved += 1U;
+    }
+    if (moved != 0U) {
+        remainder = tail->fields.link.next;
+        cache->local[class_index] = remainder;
+        cache->local_count[class_index] -= moved;
+        memx_heap_push_central_chunk_locked(
+            heap, class_index, first, tail, moved);
     }
     (void)pthread_mutex_unlock(&heap->lock);
 }
 
-static memx_heap_block_t *
+static MEMX_HEAP_NOINLINE memx_heap_block_t *
 memx_heap_refill(
     memx_heap_t *heap,
     memx_heap_cache_t *cache,
     size_t class_index) {
-    size_t moved = 0U;
-    memx_heap_block_t *block;
+    memx_heap_block_t *first;
+    memx_heap_block_t *tail;
+    memx_heap_central_chunk_t *chunk;
+    size_t moved;
 
     memx_heap_drain_remote(cache, class_index);
     if (cache->local[class_index] != NULL) {
@@ -353,16 +422,15 @@ memx_heap_refill(
         (void)pthread_mutex_unlock(&heap->lock);
         return NULL;
     }
-    while (moved < heap->config.cache_batch) {
-        block = memx_heap_pop_central_locked(heap, class_index);
-        if (block == NULL) {
-            break;
-        }
-        block->fields.link.next = cache->local[class_index];
-        cache->local[class_index] = block;
-        cache->local_count[class_index] += 1U;
-        moved += 1U;
-    }
+    first = heap->central[class_index];
+    chunk = (memx_heap_central_chunk_t *)(void *)(first + 1);
+    tail = chunk->tail;
+    moved = first->fields.requested_size;
+    heap->central[class_index] = chunk->next;
+    tail->fields.link.next = cache->local[class_index];
+    heap->central_count[class_index] -= moved;
+    cache->local[class_index] = first;
+    cache->local_count[class_index] += moved;
     (void)pthread_mutex_unlock(&heap->lock);
     return cache->local[class_index];
 }
@@ -374,34 +442,34 @@ memx_heap_allocate_small(
     size_t class_index) {
     memx_heap_cache_t *cache = memx_heap_get_cache(heap);
     memx_heap_block_t *block;
+    bool cache_hit;
 
-    if (cache == NULL || class_index >= MEMX_HEAP_CLASS_COUNT) {
+    assert(class_index < MEMX_HEAP_CLASS_COUNT);
+    if (cache == NULL) {
         return NULL;
     }
     block = cache->local[class_index];
+    cache_hit = block != NULL;
     if (block == NULL) {
         block = memx_heap_refill(heap, cache, class_index);
         if (block == NULL) {
             return NULL;
-        }
-    } else {
-        if (heap->config.collect_activity_statistics) {
-            cache->cache_hits += 1U;
         }
     }
     cache->local[class_index] = block->fields.link.next;
     cache->local_count[class_index] -= 1U;
     block->fields.link.owner = cache;
     block->fields.requested_size = (uint32_t)size;
-    if (atomic_load_explicit(
-            &block->fields.state, memory_order_relaxed) != 0U) {
-        return NULL;
-    }
+#ifndef NDEBUG
+    assert(atomic_load_explicit(
+        &block->fields.state, memory_order_relaxed) == 0U);
+#endif
     atomic_store_explicit(&block->fields.state, 1U, memory_order_release);
     if (heap->config.collect_activity_statistics) {
+        cache->cache_hits += cache_hit ? 1U : 0U;
         cache->allocation_count += 1U;
+        memx_heap_add_live_counted(heap, size);
     }
-    memx_heap_add_live(heap, size);
     return (void *)(block + 1);
 }
 
@@ -586,7 +654,7 @@ memx_heap_config_default(void) {
     memx_heap_config_t config;
     config.reserve_size = 256U * 1024U * 1024U;
     config.span_shift = 16U;
-    config.cache_batch = 128U;
+    config.cache_batch = 256U;
     config.cache_limit = 256U;
     config.collect_activity_statistics = false;
     return config;
@@ -607,7 +675,11 @@ memx_heap_create(
     }
     *out_heap = NULL;
     if (config.span_shift >= size_bits
-        || config.cache_batch == 0U || config.cache_limit < 2U) {
+        || config.cache_batch == 0U
+#if SIZE_MAX > UINT32_MAX
+        || config.cache_batch > (size_t)UINT32_MAX
+#endif
+        || config.cache_limit < 2U) {
         return MEMX_HEAP_ERROR_INVALID_ARGUMENT;
     }
     {
@@ -835,32 +907,14 @@ memx_heap_usable_size(memx_heap_t *heap, const void *pointer) {
     return result;
 }
 
-static bool
-memx_heap_release_small(
+static void
+memx_heap_route_small(
     memx_heap_t *heap,
     memx_heap_block_t *block,
-    memx_heap_span_t *span,
-    bool checked) {
+    memx_heap_span_t *span) {
     memx_heap_cache_t *owner;
     memx_heap_cache_t *current;
     size_t requested_size;
-    unsigned expected = 1U;
-
-    if (checked && !atomic_compare_exchange_strong_explicit(
-        &block->fields.state,
-        &expected,
-        0U,
-        memory_order_acq_rel,
-        memory_order_relaxed)) {
-        if (heap->config.collect_activity_statistics) {
-            (void)atomic_fetch_add_explicit(
-                &heap->invalid_frees, 1U, memory_order_relaxed);
-        }
-        return false;
-    }
-    if (!checked) {
-        atomic_store_explicit(&block->fields.state, 0U, memory_order_release);
-    }
     requested_size = block->fields.requested_size;
     owner = block->fields.link.owner;
     if (heap->config.collect_activity_statistics) {
@@ -870,13 +924,19 @@ memx_heap_release_small(
             &heap->frees, 1U, memory_order_relaxed);
     }
 
-    current = memx_heap_find_cache(heap);
+    current = memx_heap_tls_last_cache;
+    if (owner != current) {
+        current = memx_heap_find_cache(heap);
+    }
     if (owner == current && current != NULL) {
         block->fields.link.next = current->local[span->class_index];
         current->local[span->class_index] = block;
         current->local_count[span->class_index] += 1U;
-        memx_heap_flush_excess(heap, current, span->class_index);
-        return true;
+        if (current->local_count[span->class_index]
+            > heap->config.cache_limit) {
+            memx_heap_flush_excess_slow(heap, current, span->class_index);
+        }
+        return;
     }
     if (owner != NULL) {
         (void)pthread_mutex_lock(&owner->remote_lock);
@@ -889,14 +949,44 @@ memx_heap_release_small(
                 (void)atomic_fetch_add_explicit(
                     &heap->remote_frees, 1U, memory_order_relaxed);
             }
-            return true;
+            return;
         }
         (void)pthread_mutex_unlock(&owner->remote_lock);
     }
     (void)pthread_mutex_lock(&heap->lock);
     memx_heap_push_central_locked(heap, span->class_index, block);
     (void)pthread_mutex_unlock(&heap->lock);
+}
+
+static bool
+memx_heap_release_small_checked(
+    memx_heap_t *heap,
+    memx_heap_block_t *block,
+    memx_heap_span_t *span) {
+    unsigned expected = 1U;
+    if (!atomic_compare_exchange_strong_explicit(
+            &block->fields.state,
+            &expected,
+            0U,
+            memory_order_acq_rel,
+            memory_order_relaxed)) {
+        if (heap->config.collect_activity_statistics) {
+            (void)atomic_fetch_add_explicit(
+                &heap->invalid_frees, 1U, memory_order_relaxed);
+        }
+        return false;
+    }
+    memx_heap_route_small(heap, block, span);
     return true;
+}
+
+static void
+memx_heap_release_small_unchecked(
+    memx_heap_t *heap,
+    memx_heap_block_t *block,
+    memx_heap_span_t *span) {
+    atomic_store_explicit(&block->fields.state, 0U, memory_order_release);
+    memx_heap_route_small(heap, block, span);
 }
 
 bool
@@ -945,7 +1035,7 @@ memx_heap_free(memx_heap_t *heap, void *pointer) {
         return true;
     }
     (void)pthread_mutex_unlock(&heap->lock);
-    return memx_heap_release_small(heap, block, span, true);
+    return memx_heap_release_small_checked(heap, block, span);
 }
 
 void
@@ -962,7 +1052,7 @@ memx_heap_free_unchecked(memx_heap_t *heap, void *pointer) {
     if (address >= arena && address - arena < heap->arena.size) {
         memx_heap_block_t *block = (memx_heap_block_t *)pointer - 1;
         memx_heap_span_t *span = memx_heap_span_for_address(heap, address);
-        (void)memx_heap_release_small(heap, block, span, false);
+        memx_heap_release_small_unchecked(heap, block, span);
         return;
     }
     (void)memx_heap_free(heap, pointer);

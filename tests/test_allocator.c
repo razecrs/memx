@@ -53,6 +53,23 @@ test_configuration(void) {
     EXPECT_TRUE(memx_heap_create(&config, &heap)
         == MEMX_HEAP_ERROR_INVALID_ARGUMENT);
     EXPECT_TRUE(heap == NULL);
+    config = memx_heap_config_default();
+    config.cache_batch = 0U;
+    EXPECT_TRUE(memx_heap_create(&config, &heap)
+        == MEMX_HEAP_ERROR_INVALID_ARGUMENT);
+    EXPECT_TRUE(heap == NULL);
+    config = memx_heap_config_default();
+    config.cache_limit = 1U;
+    EXPECT_TRUE(memx_heap_create(&config, &heap)
+        == MEMX_HEAP_ERROR_INVALID_ARGUMENT);
+    EXPECT_TRUE(heap == NULL);
+#if SIZE_MAX > UINT32_MAX
+    config = memx_heap_config_default();
+    config.cache_batch = (size_t)UINT32_MAX + 1U;
+    EXPECT_TRUE(memx_heap_create(&config, &heap)
+        == MEMX_HEAP_ERROR_INVALID_ARGUMENT);
+    EXPECT_TRUE(heap == NULL);
+#endif
     EXPECT_TRUE(strcmp(memx_heap_status_string(MEMX_HEAP_OK), "ok") == 0);
 }
 
@@ -500,6 +517,44 @@ random_next(uint64_t *state) {
 }
 
 static void
+test_chunked_central_refill(void) {
+    enum { POINTER_COUNT = 1025, PAYLOAD_SIZE = 16 };
+    memx_heap_config_t config = memx_heap_config_default();
+    memx_heap_stats_t stats;
+    memx_heap_t *heap = NULL;
+    void *pointers[POINTER_COUNT] = {0};
+    size_t cycle;
+    size_t index;
+
+    config.cache_batch = 3U;
+    config.cache_limit = 4U;
+    config.collect_activity_statistics = true;
+    EXPECT_TRUE(memx_heap_create(&config, &heap) == MEMX_HEAP_OK);
+    if (heap == NULL) {
+        return;
+    }
+    for (cycle = 0U; cycle < 3U; ++cycle) {
+        for (index = 0U; index < POINTER_COUNT; ++index) {
+            pointers[index] = memx_heap_malloc(heap, PAYLOAD_SIZE);
+            EXPECT_TRUE(pointers[index] != NULL);
+            if (pointers[index] != NULL) {
+                memset(pointers[index], (int)(index + cycle), PAYLOAD_SIZE);
+            }
+        }
+        for (index = POINTER_COUNT; index != 0U; --index) {
+            const size_t pointer_index = index - 1U;
+            EXPECT_TRUE(memx_heap_free(heap, pointers[pointer_index]));
+            pointers[pointer_index] = NULL;
+        }
+    }
+    memx_heap_get_stats(heap, &stats);
+    EXPECT_EQ_SIZE(stats.live_requested_bytes, 0U);
+    EXPECT_EQ_SIZE(stats.small_allocations, 3U * POINTER_COUNT);
+    memx_heap_thread_detach(heap);
+    memx_heap_destroy(heap);
+}
+
+static void
 test_randomized_payload_differential(void) {
     enum { SLOT_COUNT = 256, OPERATION_COUNT = 100000 };
     void *slots[SLOT_COUNT] = {0};
@@ -578,6 +633,7 @@ main(void) {
     test_remote_free_and_detached_owner();
     test_multithread_stress();
     test_arena_exhaustion();
+    test_chunked_central_refill();
     test_randomized_payload_differential();
     if (failures != 0) {
         fprintf(stderr, "%d allocator test(s) failed\n", failures);

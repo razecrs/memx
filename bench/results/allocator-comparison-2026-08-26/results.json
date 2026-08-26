@@ -1,24 +1,27 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-26",
+  "generated_at": "2026-08-27",
   "claim_level": "single-host diagnostic allocator workload",
   "conclusion": {
     "winner_by_median_ns_per_operation": "mimalloc",
-    "memx_heap_rank": 4,
+    "memx_heap_rank": 3,
     "allocator_count": 6,
     "memx_heap_is_competitive_on_this_workload": true,
-    "primary_observed_memx_bottleneck": "small-object metadata/cache traffic; mimalloc remains approximately three times faster on this trace",
+    "memx_vs_tcmalloc_median_latency_reduction_percent": 6.734983,
+    "primary_observed_memx_bottleneck": "small-object cache traffic; MemX is approximately 5 percent behind snmalloc and remains substantially behind mimalloc on this trace",
     "optimization_history": {
       "before_median_ns_per_operation": 2371.424,
-      "after_median_ns_per_operation": 180.734,
-      "speedup_ratio": 13.121073,
+      "after_median_ns_per_operation": 169.193,
+      "speedup_ratio": 14.016088,
       "retained_changes": [
         "4096- and 8192-byte span classes",
         "in-place realloc within existing capacity",
         "explicit unchecked conventional realloc/free paths",
         "activity statistics disabled by default",
         "16-byte small-object header on x86-64 with in-span metadata",
-        "128-object default refill batch"
+        "256-object default refill batch",
+        "cold-path splitting and consolidated hot-path statistics checks",
+        "O(1) central refill through in-object free-list chunk descriptors"
       ]
     },
     "warning": "This result is deliberately not an allocator superiority claim. CPU frequency was not locked, RSS and fragmentation were not measured, and only one deterministic single-thread trace and one host were tested. The primary MemX series uses its conventional unchecked realloc/free contract and disabled activity counters; a separate checked-API sensitivity series is reported below."
@@ -82,13 +85,13 @@
       "integration": "statically linked workload executable"
     },
     "memx_heap": {
-      "version": "working tree on 2026-08-26",
+      "version": "working tree on 2026-08-27",
       "binary": "build-release/memx_heap_workload",
-      "binary_sha256": "1c5692391582c39944600dff82e7a6fca14730f613d99d3ac0677017a84d779b",
+      "binary_sha256": "84594b2d3bb326eb2394563b093afeaf0834209f9f3c5f79861e8d6153936ece",
       "checked_sensitivity_binary": "build-release/memx_heap_workload_checked",
-      "checked_sensitivity_binary_sha256": "46f099a21f863bc5abb77d17db599eb8896caacc85a609da39d4cecda5b4fec7",
+      "checked_sensitivity_binary_sha256": "74dcd8947b5122df42b897144e206159a20859bf5f3265d0fc5b8b9c541b44c5",
       "integration": "direct memx_heap API backend compiled from the same workload source",
-      "allocator_api_and_implementation_physical_c_h_lines": 1234
+      "allocator_api_and_implementation_physical_c_h_lines": 1324
     },
     "system_workload_binary": {
       "binary": "build-release/memx_allocator_workload",
@@ -97,68 +100,68 @@
   },
   "results": {
     "mimalloc": {
-      "median_ns_per_operation": 62.392,
-      "mad_ns_per_operation": 0.775,
-      "min_ns_per_operation": 61.233,
-      "max_ns_per_operation": 64.162,
-      "memx_over_competitor_median_ratio": 2.896750,
-      "raw_ns_per_operation": [62.858, 62.545, 62.472, 61.617, 63.447, 61.336, 64.162, 62.392, 62.181, 61.822, 63.427, 61.871, 64.083, 61.233, 61.273]
+      "median_ns_per_operation": 64.301,
+      "mad_ns_per_operation": 1.610,
+      "min_ns_per_operation": 61.707,
+      "max_ns_per_operation": 83.661,
+      "memx_over_competitor_median_ratio": 2.631265,
+      "raw_ns_per_operation": [83.661, 67.144, 65.823, 64.301, 73.664, 63.529, 63.554, 66.110, 61.707, 61.775, 65.862, 62.691, 63.669, 67.766, 63.344]
     },
     "jemalloc": {
-      "median_ns_per_operation": 191.131,
-      "mad_ns_per_operation": 0.846,
-      "min_ns_per_operation": 187.891,
-      "max_ns_per_operation": 198.623,
-      "memx_over_competitor_median_ratio": 0.945603,
-      "raw_ns_per_operation": [198.623, 191.031, 187.891, 193.992, 195.021, 191.131, 190.674, 192.580, 190.285, 198.075, 190.764, 191.023, 191.297, 192.854, 190.628]
+      "median_ns_per_operation": 197.074,
+      "mad_ns_per_operation": 1.328,
+      "min_ns_per_operation": 194.018,
+      "max_ns_per_operation": 249.391,
+      "memx_over_competitor_median_ratio": 0.858525,
+      "raw_ns_per_operation": [249.391, 197.074, 196.777, 196.651, 229.117, 197.224, 198.402, 196.763, 194.018, 199.956, 194.437, 197.231, 203.517, 195.300, 196.167]
     },
     "tcmalloc": {
-      "median_ns_per_operation": 175.146,
-      "mad_ns_per_operation": 0.744,
-      "min_ns_per_operation": 173.129,
-      "max_ns_per_operation": 176.206,
-      "memx_over_competitor_median_ratio": 1.031905,
-      "raw_ns_per_operation": [176.206, 174.280, 174.240, 176.075, 173.129, 175.610, 174.933, 174.862, 174.982, 175.146, 173.133, 175.452, 175.890, 175.775, 175.929]
+      "median_ns_per_operation": 181.411,
+      "mad_ns_per_operation": 1.423,
+      "min_ns_per_operation": 178.146,
+      "max_ns_per_operation": 198.090,
+      "memx_over_competitor_median_ratio": 0.932650,
+      "raw_ns_per_operation": [198.090, 180.547, 183.572, 182.915, 193.728, 181.020, 180.100, 183.979, 182.386, 181.411, 181.948, 178.146, 179.988, 179.700, 180.460]
     },
     "snmalloc": {
-      "median_ns_per_operation": 156.207,
-      "mad_ns_per_operation": 1.101,
-      "min_ns_per_operation": 155.008,
-      "max_ns_per_operation": 159.293,
-      "memx_over_competitor_median_ratio": 1.157016,
-      "raw_ns_per_operation": [156.771, 158.846, 155.106, 158.988, 155.733, 159.293, 157.466, 155.013, 155.169, 155.540, 156.207, 155.869, 156.996, 155.008, 157.557]
+      "median_ns_per_operation": 161.169,
+      "mad_ns_per_operation": 1.531,
+      "min_ns_per_operation": 157.488,
+      "max_ns_per_operation": 183.673,
+      "memx_over_competitor_median_ratio": 1.049786,
+      "raw_ns_per_operation": [183.673, 162.700, 161.169, 157.488, 170.177, 163.893, 160.670, 164.557, 158.950, 161.060, 159.748, 160.962, 162.059, 161.632, 159.464]
     },
     "glibc": {
-      "median_ns_per_operation": 287.712,
-      "mad_ns_per_operation": 1.570,
-      "min_ns_per_operation": 283.298,
-      "max_ns_per_operation": 290.991,
-      "memx_over_competitor_median_ratio": 0.628177,
-      "raw_ns_per_operation": [290.991, 283.298, 289.020, 285.475, 288.606, 287.129, 286.142, 289.088, 286.075, 289.102, 290.810, 287.712, 284.855, 289.317, 286.613]
+      "median_ns_per_operation": 299.449,
+      "mad_ns_per_operation": 2.335,
+      "min_ns_per_operation": 292.399,
+      "max_ns_per_operation": 358.327,
+      "memx_over_competitor_median_ratio": 0.565014,
+      "raw_ns_per_operation": [356.353, 294.495, 292.399, 299.449, 358.327, 314.244, 301.784, 293.551, 299.789, 297.967, 295.561, 297.724, 299.933, 300.193, 298.781]
     },
     "memx_heap": {
-      "median_ns_per_operation": 180.734,
-      "mad_ns_per_operation": 1.048,
-      "min_ns_per_operation": 178.574,
-      "max_ns_per_operation": 185.405,
-      "raw_ns_per_operation": [181.937, 179.753, 180.845, 179.699, 179.686, 182.578, 178.574, 181.391, 181.184, 179.336, 185.405, 178.752, 181.535, 180.734, 179.437]
+      "median_ns_per_operation": 169.193,
+      "mad_ns_per_operation": 1.970,
+      "min_ns_per_operation": 166.959,
+      "max_ns_per_operation": 182.068,
+      "raw_ns_per_operation": [182.068, 169.230, 169.193, 172.325, 177.676, 181.833, 167.852, 167.223, 166.959, 168.130, 167.829, 169.413, 167.664, 173.606, 167.105]
     }
   },
   "checked_api_sensitivity": {
     "series": "memx_heap_checked",
     "timed_runs": 15,
-    "median_ns_per_operation": 205.084,
-    "mad_ns_per_operation": 1.839,
-    "min_ns_per_operation": 201.080,
-    "max_ns_per_operation": 208.650,
-    "checked_over_unchecked_median_ratio": 1.134728,
-    "raw_ns_per_operation": [205.927, 208.650, 201.970, 205.084, 206.930, 201.080, 206.865, 206.923, 204.058, 205.998, 201.608, 201.629, 205.658, 204.373, 203.127]
+    "median_ns_per_operation": 191.985,
+    "mad_ns_per_operation": 1.251,
+    "min_ns_per_operation": 188.667,
+    "max_ns_per_operation": 196.917,
+    "checked_over_unchecked_median_ratio": 1.134710,
+    "raw_ns_per_operation": [196.917, 190.734, 191.409, 188.889, 188.667, 195.838, 192.780, 195.306, 191.755, 191.060, 192.305, 191.985, 195.793, 190.220, 192.946]
   },
   "ranking_by_median_ns_per_operation": [
     "mimalloc",
     "snmalloc",
-    "tcmalloc",
     "memx_heap",
+    "tcmalloc",
     "jemalloc",
     "glibc"
   ]
