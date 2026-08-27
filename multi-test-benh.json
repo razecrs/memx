@@ -1,18 +1,24 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-27T01:51:28+02:00",
+  "generated_at": "2026-08-27T09:10:00+02:00",
   "requested_filename_preserved": true,
   "claim_level": "multi-platform diagnostic allocator workload and build/correctness matrix",
   "repository": {
     "baseline_commit": "3d045c198cfb9975354f31c9067ddebfecee2e7f",
     "tested_worktree_changes": [
       "include/memx/memx.h",
-      "src/memx.c"
+      "src/memx.c",
+      "tests/test_trace.c"
     ],
     "portability_fix": {
       "problem": "MemX required max_align_t alignment from every small internal allocation; Android Bionic/Scudo can return an 8-byte-aligned small allocation while this NDK reports max_align_t alignment as 16, causing false out-of-memory failures.",
       "resolution": "Require max(_Alignof(uintptr_t), 4), which covers every v0 internal allocated type and the descriptor's two tag bits; compile-time assertions enforce the internal-type invariant.",
       "regression_result": "The Android suite changed from cascading OOM failures and SIGSEGV to a complete pass."
+    },
+    "windows_test_portability_fix": {
+      "problem": "The trace round-trip test compared complete event structs with memcmp, including ABI padding bytes that are not serialized and need not have deterministic values on Win32.",
+      "resolution": "Compare all six serialized event fields explicitly instead of comparing object representation padding.",
+      "regression_result": "The Win32 trace suite changed from 7 padding-sensitive failures to all 5123 checks passing; Linux and Win64 remained passing."
     }
   },
   "summary": {
@@ -24,6 +30,8 @@
     "android_arm64_unavailable": [
       "tcmalloc"
     ],
+    "windows_x86_64_wine_compatibility": "pass",
+    "windows_x86_wine_compatibility": "pass",
     "x86_64_memx_vs_tcmalloc_latency_reduction_percent": 7.370823,
     "x86_64_memx_vs_jemalloc_latency_reduction_percent": 13.673205,
     "android_arm64_memx_vs_jemalloc_latency_reduction_percent": 2.808690,
@@ -70,7 +78,13 @@
         },
         "memx_trace_test": {
           "status": "pass",
-          "checks": 5123
+          "checks": 5123,
+          "post_win32_padding_fix_revalidation": {
+            "status": "pass",
+            "device": "OPPO CPH2841",
+            "transport": "ADB",
+            "checks": 5123
+          }
         },
         "memx_exhaustive_test": {
           "status": "pass",
@@ -87,6 +101,34 @@
       },
       "explicit_numeric_checks": 1574103,
       "memx_test_sha256": "11b97740334b546cc3144187858df19cd7d11bd856f573424f0bd15d4a6c619b"
+    },
+    "windows_wine_compatibility": {
+      "status": "pass",
+      "runner": "Wine 11.0 Staging",
+      "native_windows_claim": false,
+      "x86_64": {
+        "status": "pass",
+        "suites": {
+          "memx_test": {"status": "pass", "checks": 82594},
+          "memx_baseline_test": {"status": "pass", "checks": 547441},
+          "memx_trace_test": {"status": "pass", "checks": 5123},
+          "memx_exhaustive_test": {"status": "pass", "checks": 930427},
+          "memx_fault_test": {"status": "pass", "checks": 1078}
+        },
+        "explicit_numeric_checks": 1566663
+      },
+      "x86": {
+        "status": "pass",
+        "suites": {
+          "memx_test": {"status": "pass", "checks": 82593},
+          "memx_baseline_test": {"status": "pass", "checks": 547441},
+          "memx_trace_test": {"status": "pass", "checks": 5123},
+          "memx_exhaustive_test": {"status": "pass", "checks": 930427},
+          "memx_fault_test": {"status": "pass", "checks": 1078}
+        },
+        "explicit_numeric_checks": 1566662
+      },
+      "scope_note": "The core indexing/test targets are supported. The experimental memx_heap allocator target is currently enabled only for Linux and Android."
     }
   },
   "strict_build_matrix": [
@@ -105,8 +147,8 @@
     {"target": "linux-riscv32", "status": "pass", "validation": "strict-cross-build"},
     {"target": "linux-riscv64", "status": "pass", "validation": "strict-cross-build"},
     {"target": "linux-sparc64-big-endian", "status": "pass", "validation": "strict-cross-build"},
-    {"target": "windows-x86", "status": "pass", "validation": "strict-cross-build"},
-    {"target": "windows-x86_64", "status": "pass", "validation": "strict-cross-build"}
+    {"target": "windows-x86", "status": "pass", "validation": "strict-cross-build-and-wine-compatibility-run"},
+    {"target": "windows-x86_64", "status": "pass", "validation": "strict-cross-build-and-wine-compatibility-run"}
   ],
   "mounted_real_os_images": [
     {
@@ -363,6 +405,8 @@
     "No QEMU or other ISA emulation was used.",
     "MIPS, PPC64LE, and SPARC64 OS images were mounted and inspected, but binaries were not executed without native hardware.",
     "Android TCMalloc has no timing because the pinned upstream source rejected Android/Bionic during compilation.",
+    "Windows x86 and x86-64 were executed through Wine compatibility layers, not on a native Windows kernel.",
+    "No macOS or BSD build/runtime claim is made because no corresponding native runner or SDK is attached.",
     "Allocator timing excludes process startup because elapsed time is measured inside the shared workload.",
     "RSS, fragmentation, multi-thread scaling, power, and locked-frequency measurements are not part of this run.",
     "The Android core lookup table is a single-run diagnostic and is not used for allocator ranking."

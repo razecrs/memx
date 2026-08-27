@@ -271,8 +271,14 @@ test_round_trip(void) {
     CHECK(loaded.granule_shift == original.granule_shift);
     CHECK(loaded.event_count == original.event_count);
     for (i = 0U; i < original.event_count && i < loaded.event_count; ++i) {
-        CHECK(memcmp(&loaded.events[i], &original.events[i],
-            sizeof(original.events[i])) == 0);
+        const memx_trace_event_t *actual = &loaded.events[i];
+        const memx_trace_event_t *expected = &original.events[i];
+        CHECK(actual->sequence == expected->sequence
+            && actual->thread_id == expected->thread_id
+            && actual->operation == expected->operation
+            && actual->address == expected->address
+            && actual->size == expected->size
+            && actual->handle == expected->handle);
     }
     CHECK(unlink(path) == 0);
     memx_trace_destroy(&loaded);
