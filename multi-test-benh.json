@@ -37,12 +37,7 @@
     "x86_64_memx_vs_tcmalloc_latency_reduction_percent": 7.370823,
     "x86_64_memx_vs_jemalloc_latency_reduction_percent": 13.673205,
     "android_arm64_memx_vs_jemalloc_latency_reduction_percent": 2.80869,
-    "qemu_mips32_be_memx_rank": 1,
-    "qemu_ppc64le_memx_rank": 1,
-    "qemu_sparc64_be_memx_rank": 1,
-    "qemu_mips32_be_memx_vs_closest_competitor_percent": 20.924983,
-    "qemu_ppc64le_memx_vs_closest_competitor_percent": 12.634874,
-    "qemu_sparc64_be_memx_vs_closest_competitor_percent": 8.918447,
+    "qemu_emulated_rankings": "See emulated_allocator_diagnostics. QEMU TCG timings are dominated by translated instruction count rather than cache and branch-prediction behaviour, so emulated rankings are deliberately not summarised here and must not be read as ISA performance.",
     "warning": "Native results are not compared across machines. QEMU TCG/user-mode timings are diagnostic rankings only and are not physical MIPS, PowerPC, or SPARC performance claims."
   },
   "correctness": {
@@ -743,8 +738,10 @@
         "memx_trace_test": {"status": "pass", "checks": 5123},
         "memx_exhaustive_test": {"status": "pass", "checks": 930427},
         "memx_fault_test": {"status": "pass", "checks": 1149},
-        "memx_heap_test": {"status": "pass", "reported": "allocator tests passed"}
-      }
+        "memx_heap_test": {"status": "pass", "reported": "allocator tests passed"},
+        "memx_allocator_workload": {"status": "pass", "exit_code": 0}
+      },
+      "boot_medium": "live CD"
     }
   },
   "emulated_allocator_diagnostics": {
@@ -972,7 +969,7 @@
       "android_checked_heap_binary_sha256": "6018d683a749a4f770d3ea3e79d27929aaad20367156e4db2dbf12c7af0cd0cb"
     }
   },
-  "independent_review": {
+  "internal_consistency_check": {
     "reviewed_at": "2026-09-02T20:38:10+02:00",
     "correctness_judge": {
       "verdict": "pass",
@@ -997,43 +994,5 @@
     "Allocator timing excludes process startup because elapsed time is measured inside the shared workload.",
     "RSS, fragmentation, multi-thread scaling, power, and locked-frequency measurements are not part of this run.",
     "The Android core lookup table is a single-run diagnostic and is not used for allocator ranking."
-  ],
-  "sparc64": {
-    "architecture": "sparc64",
-    "os": "Gentoo install-sparc64-minimal 20260826 (live CD)",
-    "emulated": true,
-    "emulator": "QEMU sun4u UltraSPARC-IIi",
-    "boot_method": "GRUB serial console (console=ttyS0,9600)",
-    "test_results": {
-      "memx_test": {
-        "exit_code": 0,
-        "status": "pass"
-      },
-      "memx_baseline_test": {
-        "exit_code": 0,
-        "status": "pass"
-      },
-      "memx_trace_test": {
-        "exit_code": 0,
-        "status": "pass"
-      },
-      "memx_exhaustive_test": {
-        "exit_code": 0,
-        "status": "pass"
-      },
-      "memx_fault_test": {
-        "exit_code": 0,
-        "status": "pass"
-      },
-      "memx_heap_test": {
-        "exit_code": 0,
-        "status": "pass"
-      },
-      "memx_allocator_workload": {
-        "exit_code": 0,
-        "status": "pass"
-      }
-    },
-    "evidence_note": "Raw serial-control bytes were removed; structured pass counts are retained in emulated_guest_execution_validation.sparc64_big_endian."
-  }
+  ]
 }
