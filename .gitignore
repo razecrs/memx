@@ -17,3 +17,7 @@ __pycache__/
 *.profdata
 perf.data*
 .DS_Store
+
+# Agent session transcripts are local working notes, not project evidence.
+codex-session-*.md
+/build-final-*

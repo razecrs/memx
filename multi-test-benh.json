@@ -1,10 +1,12 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-27T09:10:00+02:00",
+  "generated_at": "2026-09-02T20:38:10+02:00",
   "requested_filename_preserved": true,
-  "claim_level": "multi-platform diagnostic allocator workload and build/correctness matrix",
+  "claim_level": "native x86-64/Android allocator results plus QEMU guest correctness and cross-ISA emulation diagnostics",
   "repository": {
     "baseline_commit": "3d045c198cfb9975354f31c9067ddebfecee2e7f",
+    "tested_commit": "9dc9a43efa455ad7fb6c397f567d2b3c399b3d33",
+    "cross_isa_benchmark_code_changes_after_tested_commit": [],
     "tested_worktree_changes": [
       "include/memx/memx.h",
       "src/memx.c",
@@ -34,8 +36,14 @@
     "windows_x86_wine_compatibility": "pass",
     "x86_64_memx_vs_tcmalloc_latency_reduction_percent": 7.370823,
     "x86_64_memx_vs_jemalloc_latency_reduction_percent": 13.673205,
-    "android_arm64_memx_vs_jemalloc_latency_reduction_percent": 2.808690,
-    "warning": "These are deterministic single-thread workload results, not universal allocator superiority claims. Results from different machines are not compared with each other. CPU frequency and thermals were not locked."
+    "android_arm64_memx_vs_jemalloc_latency_reduction_percent": 2.80869,
+    "qemu_mips32_be_memx_rank": 1,
+    "qemu_ppc64le_memx_rank": 1,
+    "qemu_sparc64_be_memx_rank": 1,
+    "qemu_mips32_be_memx_vs_closest_competitor_percent": 20.924983,
+    "qemu_ppc64le_memx_vs_closest_competitor_percent": 12.634874,
+    "qemu_sparc64_be_memx_vs_closest_competitor_percent": 8.918447,
+    "warning": "Native results are not compared across machines. QEMU TCG/user-mode timings are diagnostic rankings only and are not physical MIPS, PowerPC, or SPARC performance claims."
   },
   "correctness": {
     "x86_64_linux": {
@@ -109,22 +117,52 @@
       "x86_64": {
         "status": "pass",
         "suites": {
-          "memx_test": {"status": "pass", "checks": 82594},
-          "memx_baseline_test": {"status": "pass", "checks": 547441},
-          "memx_trace_test": {"status": "pass", "checks": 5123},
-          "memx_exhaustive_test": {"status": "pass", "checks": 930427},
-          "memx_fault_test": {"status": "pass", "checks": 1078}
+          "memx_test": {
+            "status": "pass",
+            "checks": 82594
+          },
+          "memx_baseline_test": {
+            "status": "pass",
+            "checks": 547441
+          },
+          "memx_trace_test": {
+            "status": "pass",
+            "checks": 5123
+          },
+          "memx_exhaustive_test": {
+            "status": "pass",
+            "checks": 930427
+          },
+          "memx_fault_test": {
+            "status": "pass",
+            "checks": 1078
+          }
         },
         "explicit_numeric_checks": 1566663
       },
       "x86": {
         "status": "pass",
         "suites": {
-          "memx_test": {"status": "pass", "checks": 82593},
-          "memx_baseline_test": {"status": "pass", "checks": 547441},
-          "memx_trace_test": {"status": "pass", "checks": 5123},
-          "memx_exhaustive_test": {"status": "pass", "checks": 930427},
-          "memx_fault_test": {"status": "pass", "checks": 1078}
+          "memx_test": {
+            "status": "pass",
+            "checks": 82593
+          },
+          "memx_baseline_test": {
+            "status": "pass",
+            "checks": 547441
+          },
+          "memx_trace_test": {
+            "status": "pass",
+            "checks": 5123
+          },
+          "memx_exhaustive_test": {
+            "status": "pass",
+            "checks": 930427
+          },
+          "memx_fault_test": {
+            "status": "pass",
+            "checks": 1078
+          }
         },
         "explicit_numeric_checks": 1566662
       },
@@ -132,23 +170,91 @@
     }
   },
   "strict_build_matrix": [
-    {"target": "linux-x86_64-gcc", "status": "pass", "validation": "native-build-and-run"},
-    {"target": "linux-x86_64-clang", "status": "pass", "validation": "native-build-and-run"},
-    {"target": "linux-x86", "status": "pass", "validation": "strict-cross-build"},
-    {"target": "android-arm64-v8a-api35", "status": "pass", "validation": "strict-build-and-native-device-run"},
-    {"target": "android-armeabi-v7a-api35", "status": "pass", "validation": "strict-cross-build"},
-    {"target": "android-x86-api35", "status": "pass", "validation": "strict-cross-build"},
-    {"target": "android-x86_64-api35", "status": "pass", "validation": "strict-cross-build"},
-    {"target": "linux-armv7", "status": "pass", "validation": "strict-cross-build"},
-    {"target": "linux-mips32-big-endian", "status": "pass", "validation": "strict-cross-build"},
-    {"target": "linux-mips64-n32", "status": "pass", "validation": "strict-cross-build"},
-    {"target": "linux-ppc64-big-endian", "status": "pass", "validation": "strict-cross-build"},
-    {"target": "linux-ppc64le", "status": "pass", "validation": "strict-static-cross-build"},
-    {"target": "linux-riscv32", "status": "pass", "validation": "strict-cross-build"},
-    {"target": "linux-riscv64", "status": "pass", "validation": "strict-cross-build"},
-    {"target": "linux-sparc64-big-endian", "status": "pass", "validation": "strict-cross-build"},
-    {"target": "windows-x86", "status": "pass", "validation": "strict-cross-build-and-wine-compatibility-run"},
-    {"target": "windows-x86_64", "status": "pass", "validation": "strict-cross-build-and-wine-compatibility-run"}
+    {
+      "target": "linux-x86_64-gcc",
+      "status": "pass",
+      "validation": "native-build-and-run"
+    },
+    {
+      "target": "linux-x86_64-clang",
+      "status": "pass",
+      "validation": "native-build-and-run"
+    },
+    {
+      "target": "linux-x86",
+      "status": "pass",
+      "validation": "strict-cross-build"
+    },
+    {
+      "target": "android-arm64-v8a-api35",
+      "status": "pass",
+      "validation": "strict-build-and-native-device-run"
+    },
+    {
+      "target": "android-armeabi-v7a-api35",
+      "status": "pass",
+      "validation": "strict-cross-build"
+    },
+    {
+      "target": "android-x86-api35",
+      "status": "pass",
+      "validation": "strict-cross-build"
+    },
+    {
+      "target": "android-x86_64-api35",
+      "status": "pass",
+      "validation": "strict-cross-build"
+    },
+    {
+      "target": "linux-armv7",
+      "status": "pass",
+      "validation": "strict-cross-build"
+    },
+    {
+      "target": "linux-mips32-big-endian",
+      "status": "pass",
+      "validation": "strict-cross-build"
+    },
+    {
+      "target": "linux-mips64-n32",
+      "status": "pass",
+      "validation": "strict-cross-build"
+    },
+    {
+      "target": "linux-ppc64-big-endian",
+      "status": "pass",
+      "validation": "strict-cross-build"
+    },
+    {
+      "target": "linux-ppc64le",
+      "status": "pass",
+      "validation": "strict-static-cross-build"
+    },
+    {
+      "target": "linux-riscv32",
+      "status": "pass",
+      "validation": "strict-cross-build"
+    },
+    {
+      "target": "linux-riscv64",
+      "status": "pass",
+      "validation": "strict-cross-build"
+    },
+    {
+      "target": "linux-sparc64-big-endian",
+      "status": "pass",
+      "validation": "strict-cross-build"
+    },
+    {
+      "target": "windows-x86",
+      "status": "pass",
+      "validation": "strict-cross-build-and-wine-compatibility-run"
+    },
+    {
+      "target": "windows-x86_64",
+      "status": "pass",
+      "validation": "strict-cross-build-and-wine-compatibility-run"
+    }
   ],
   "mounted_real_os_images": [
     {
@@ -158,7 +264,7 @@
       "filesystem": "ext4",
       "mode": "read-only",
       "image_sha256": "6c8c6a10ada9cbcd55d7fd50f521320da39f3cf0bad5059222ca7d14ba509309",
-      "binary_validation": "ELF32 MSB MIPS32 static build produced; not executed because emulation was explicitly excluded"
+      "binary_validation": "ELF32 MSB MIPS32 static build produced; not executed on native hardware, then validated under QEMU user-mode and an OpenWrt full-system guest"
     },
     {
       "target": "ppc64le",
@@ -167,7 +273,7 @@
       "filesystem": "xfs",
       "mode": "read-only",
       "image_sha256": "28624d17b89aff34c23a966a3399d77781ad682287b55d09d225b8fa95f0bd94",
-      "binary_validation": "ELF64 LSB OpenPOWER ELFv2 static build produced; not executed because no native PPC64LE hardware was attached"
+      "binary_validation": "ELF64 LSB OpenPOWER ELFv2 static build produced; not executed on native hardware, then validated under QEMU user-mode and a Fedora CoreOS full-system guest"
     },
     {
       "target": "sparc64-big-endian",
@@ -176,7 +282,7 @@
       "filesystem": "squashfs",
       "mode": "read-only",
       "image_sha256": "7d8a59c09f6b29f72219701ce4c8c9e98bb6aa08cbaf095eeba961d5a8bddd47",
-      "binary_validation": "ELF64 MSB SPARC V9 static build produced; not executed because emulation was explicitly excluded"
+      "binary_validation": "ELF64 MSB SPARC V9 static build produced; not executed on native hardware, then validated under QEMU user-mode and a Gentoo full-system guest"
     }
   ],
   "allocator_workload": {
@@ -188,7 +294,22 @@
     "timed_runs_per_allocator": 15,
     "warmup_runs_per_allocator": 1,
     "ordering": "cyclic interleave with rotated starting allocator",
-    "sizes_bytes": [16, 24, 32, 48, 64, 96, 128, 192, 256, 512, 1024, 2048, 4096, 8192],
+    "sizes_bytes": [
+      16,
+      24,
+      32,
+      48,
+      64,
+      96,
+      128,
+      192,
+      256,
+      512,
+      1024,
+      2048,
+      4096,
+      8192
+    ],
     "statistic": "median with median absolute deviation"
   },
   "x86_64_linux_allocator_results": {
@@ -215,51 +336,163 @@
         "median_ns_per_operation": 67.696,
         "mad_ns_per_operation": 0.973,
         "min_ns_per_operation": 64.454,
-        "max_ns_per_operation": 71.370,
-        "raw_ns_per_operation": [64.454, 71.370, 68.079, 66.542, 66.486, 68.654, 67.431, 67.728, 67.696, 67.292, 68.669, 68.410, 65.602, 69.822, 65.969]
+        "max_ns_per_operation": 71.37,
+        "raw_ns_per_operation": [
+          64.454,
+          71.37,
+          68.079,
+          66.542,
+          66.486,
+          68.654,
+          67.431,
+          67.728,
+          67.696,
+          67.292,
+          68.669,
+          68.41,
+          65.602,
+          69.822,
+          65.969
+        ]
       },
       "snmalloc": {
         "median_ns_per_operation": 164.544,
         "mad_ns_per_operation": 0.933,
         "min_ns_per_operation": 162.153,
         "max_ns_per_operation": 168.308,
-        "raw_ns_per_operation": [162.153, 163.992, 168.308, 166.493, 162.335, 165.554, 163.437, 165.477, 164.183, 164.585, 164.195, 164.544, 163.978, 166.074, 165.097]
+        "raw_ns_per_operation": [
+          162.153,
+          163.992,
+          168.308,
+          166.493,
+          162.335,
+          165.554,
+          163.437,
+          165.477,
+          164.183,
+          164.585,
+          164.195,
+          164.544,
+          163.978,
+          166.074,
+          165.097
+        ]
       },
       "memx_heap": {
         "median_ns_per_operation": 174.141,
         "mad_ns_per_operation": 1.307,
         "min_ns_per_operation": 169.355,
         "max_ns_per_operation": 177.043,
-        "raw_ns_per_operation": [177.028, 172.930, 175.005, 169.355, 172.834, 174.393, 172.862, 174.619, 176.759, 172.989, 176.199, 177.043, 171.513, 172.157, 174.141]
+        "raw_ns_per_operation": [
+          177.028,
+          172.93,
+          175.005,
+          169.355,
+          172.834,
+          174.393,
+          172.862,
+          174.619,
+          176.759,
+          172.989,
+          176.199,
+          177.043,
+          171.513,
+          172.157,
+          174.141
+        ]
       },
       "tcmalloc": {
         "median_ns_per_operation": 187.998,
         "mad_ns_per_operation": 2.108,
         "min_ns_per_operation": 182.485,
-        "max_ns_per_operation": 197.250,
-        "raw_ns_per_operation": [188.675, 187.029, 184.908, 188.235, 188.193, 189.261, 187.998, 185.648, 197.250, 188.647, 183.905, 185.890, 182.485, 183.466, 192.483]
+        "max_ns_per_operation": 197.25,
+        "raw_ns_per_operation": [
+          188.675,
+          187.029,
+          184.908,
+          188.235,
+          188.193,
+          189.261,
+          187.998,
+          185.648,
+          197.25,
+          188.647,
+          183.905,
+          185.89,
+          182.485,
+          183.466,
+          192.483
+        ]
       },
       "jemalloc": {
         "median_ns_per_operation": 201.723,
         "mad_ns_per_operation": 1.148,
         "min_ns_per_operation": 198.933,
         "max_ns_per_operation": 214.741,
-        "raw_ns_per_operation": [201.723, 202.871, 198.933, 202.878, 200.767, 200.589, 203.579, 204.736, 199.930, 201.228, 202.477, 201.144, 214.741, 201.105, 208.028]
+        "raw_ns_per_operation": [
+          201.723,
+          202.871,
+          198.933,
+          202.878,
+          200.767,
+          200.589,
+          203.579,
+          204.736,
+          199.93,
+          201.228,
+          202.477,
+          201.144,
+          214.741,
+          201.105,
+          208.028
+        ]
       },
       "glibc": {
-        "median_ns_per_operation": 305.780,
+        "median_ns_per_operation": 305.78,
         "mad_ns_per_operation": 2.702,
         "min_ns_per_operation": 302.541,
-        "max_ns_per_operation": 311.140,
-        "raw_ns_per_operation": [310.529, 307.726, 309.584, 303.990, 305.780, 304.372, 302.541, 310.720, 302.921, 309.715, 305.400, 303.078, 306.602, 304.718, 311.140]
+        "max_ns_per_operation": 311.14,
+        "raw_ns_per_operation": [
+          310.529,
+          307.726,
+          309.584,
+          303.99,
+          305.78,
+          304.372,
+          302.541,
+          310.72,
+          302.921,
+          309.715,
+          305.4,
+          303.078,
+          306.602,
+          304.718,
+          311.14
+        ]
       },
       "memx_heap_checked": {
-        "median_ns_per_operation": 199.330,
+        "median_ns_per_operation": 199.33,
         "mad_ns_per_operation": 1.892,
-        "min_ns_per_operation": 195.760,
+        "min_ns_per_operation": 195.76,
         "max_ns_per_operation": 210.884,
         "checked_over_unchecked_percent": 14.464715,
-        "raw_ns_per_operation": [203.121, 200.903, 202.210, 197.071, 201.222, 195.760, 198.844, 198.581, 197.424, 201.806, 200.090, 198.715, 199.330, 198.567, 210.884]
+        "raw_ns_per_operation": [
+          203.121,
+          200.903,
+          202.21,
+          197.071,
+          201.222,
+          195.76,
+          198.844,
+          198.581,
+          197.424,
+          201.806,
+          200.09,
+          198.715,
+          199.33,
+          198.567,
+          210.884
+        ]
       }
     }
   },
@@ -290,36 +523,116 @@
         "median_ns_per_operation": 109.918,
         "mad_ns_per_operation": 1.216,
         "min_ns_per_operation": 96.334,
-        "max_ns_per_operation": 114.870,
-        "raw_ns_per_operation": [111.134, 110.099, 108.114, 114.870, 109.531, 103.246, 109.918, 108.330, 96.334, 111.052, 110.685, 107.101, 109.788, 110.162, 112.399]
+        "max_ns_per_operation": 114.87,
+        "raw_ns_per_operation": [
+          111.134,
+          110.099,
+          108.114,
+          114.87,
+          109.531,
+          103.246,
+          109.918,
+          108.33,
+          96.334,
+          111.052,
+          110.685,
+          107.101,
+          109.788,
+          110.162,
+          112.399
+        ]
       },
       "snmalloc": {
         "median_ns_per_operation": 134.708,
         "mad_ns_per_operation": 0.688,
         "min_ns_per_operation": 128.019,
         "max_ns_per_operation": 137.212,
-        "raw_ns_per_operation": [128.019, 135.517, 136.109, 134.296, 134.929, 134.620, 137.212, 135.355, 135.396, 135.172, 129.474, 134.708, 131.996, 134.360, 132.576]
+        "raw_ns_per_operation": [
+          128.019,
+          135.517,
+          136.109,
+          134.296,
+          134.929,
+          134.62,
+          137.212,
+          135.355,
+          135.396,
+          135.172,
+          129.474,
+          134.708,
+          131.996,
+          134.36,
+          132.576
+        ]
       },
       "memx_heap": {
         "median_ns_per_operation": 147.862,
         "mad_ns_per_operation": 3.288,
         "min_ns_per_operation": 133.129,
         "max_ns_per_operation": 157.203,
-        "raw_ns_per_operation": [155.487, 150.259, 145.273, 147.492, 156.485, 156.790, 143.895, 146.770, 151.150, 157.203, 149.102, 133.129, 146.696, 147.862, 140.072]
+        "raw_ns_per_operation": [
+          155.487,
+          150.259,
+          145.273,
+          147.492,
+          156.485,
+          156.79,
+          143.895,
+          146.77,
+          151.15,
+          157.203,
+          149.102,
+          133.129,
+          146.696,
+          147.862,
+          140.072
+        ]
       },
       "jemalloc": {
         "median_ns_per_operation": 152.135,
-        "mad_ns_per_operation": 1.580,
+        "mad_ns_per_operation": 1.58,
         "min_ns_per_operation": 149.787,
         "max_ns_per_operation": 162.059,
-        "raw_ns_per_operation": [149.787, 150.555, 149.796, 151.927, 152.186, 154.804, 151.205, 162.059, 157.680, 151.597, 155.170, 152.135, 154.508, 151.187, 152.328]
+        "raw_ns_per_operation": [
+          149.787,
+          150.555,
+          149.796,
+          151.927,
+          152.186,
+          154.804,
+          151.205,
+          162.059,
+          157.68,
+          151.597,
+          155.17,
+          152.135,
+          154.508,
+          151.187,
+          152.328
+        ]
       },
       "bionic": {
         "median_ns_per_operation": 468.314,
         "mad_ns_per_operation": 7.621,
         "min_ns_per_operation": 451.064,
         "max_ns_per_operation": 478.998,
-        "raw_ns_per_operation": [459.880, 477.996, 451.064, 460.693, 471.776, 461.896, 476.162, 469.535, 465.668, 473.854, 478.998, 468.794, 454.508, 468.314, 457.862]
+        "raw_ns_per_operation": [
+          459.88,
+          477.996,
+          451.064,
+          460.693,
+          471.776,
+          461.896,
+          476.162,
+          469.535,
+          465.668,
+          473.854,
+          478.998,
+          468.794,
+          454.508,
+          468.314,
+          457.862
+        ]
       },
       "memx_heap_checked": {
         "median_ns_per_operation": 166.528,
@@ -327,7 +640,23 @@
         "min_ns_per_operation": 160.199,
         "max_ns_per_operation": 176.025,
         "checked_over_unchecked_percent": 12.623933,
-        "raw_ns_per_operation": [169.610, 176.025, 166.538, 164.551, 160.199, 166.528, 162.071, 162.531, 169.375, 167.910, 165.233, 168.290, 165.948, 165.474, 167.356]
+        "raw_ns_per_operation": [
+          169.61,
+          176.025,
+          166.538,
+          164.551,
+          160.199,
+          166.528,
+          162.071,
+          162.531,
+          169.375,
+          167.91,
+          165.233,
+          168.29,
+          165.948,
+          165.474,
+          167.356
+        ]
       }
     },
     "tcmalloc": {
@@ -350,7 +679,7 @@
     "warning": "Single-run diagnostic only; use the repeated allocator workload above for ranking.",
     "selected_results": {
       "uniform": {
-        "flat_assume_mapped_ns_per_lookup": 1.8310,
+        "flat_assume_mapped_ns_per_lookup": 1.831,
         "flat_metadata_bytes": 36864,
         "memx_bounded_assume_mapped_ns_per_lookup": 1.2339,
         "memx_metadata_bytes": 8192
@@ -369,22 +698,263 @@
       }
     }
   },
+  "emulated_guest_execution_validation": {
+    "qemu_version": "10.2.2",
+    "scope": "MemX execution correctness and compatibility under full-system guest kernels; not a kernel-validation or performance result.",
+    "mips32_big_endian": {
+      "status": "pass",
+      "guest": "OpenWrt 24.10.4",
+      "kernel": "Linux 6.6.110",
+      "machine": "QEMU Malta / MIPS 24Kc",
+      "toolchain": "official OpenWrt 24.10.4 mips_24kc GCC 13.3.0 musl soft-float",
+      "toolchain_note": "A Bootlin hard-float binary faulted on the soft-float guest; rebuilding without source changes using the matching OpenWrt toolchain resolved the incompatibility.",
+      "suites": {
+        "memx_test": {"status": "pass", "checks": 89962},
+        "memx_baseline_test": {"status": "pass", "checks": 547441},
+        "memx_trace_test": {"status": "pass", "checks": 5123},
+        "memx_exhaustive_test": {"status": "pass", "checks": 930427},
+        "memx_fault_test": {"status": "pass", "checks": 1149},
+        "memx_heap_test": {"status": "pass", "reported": "allocator tests passed"}
+      }
+    },
+    "ppc64le": {
+      "status": "pass",
+      "guest": "Fedora CoreOS 44.20260802.3.1",
+      "kernel": "Linux 7.1.6-201.fc44.ppc64le",
+      "machine": "QEMU pSeries / POWER9",
+      "suites": {
+        "memx_test": {"status": "pass", "checks": 89963},
+        "memx_baseline_test": {"status": "pass", "checks": 547441},
+        "memx_trace_test": {"status": "pass", "checks": 5123},
+        "memx_exhaustive_test": {"status": "pass", "checks": 930427},
+        "memx_fault_test": {"status": "pass", "checks": 1149},
+        "memx_heap_test": {"status": "pass", "reported": "allocator tests passed"}
+      }
+    },
+    "sparc64_big_endian": {
+      "status": "pass",
+      "guest": "Gentoo install-sparc64-minimal 20260826",
+      "kernel": "Linux 7.2.0-gentoo-sparc64",
+      "machine": "QEMU sun4u / UltraSPARC IIi",
+      "boot_method": "GRUB serial console with console=ttyS0,9600",
+      "suites": {
+        "memx_test": {"status": "pass", "checks": 89963},
+        "memx_baseline_test": {"status": "pass", "checks": 547441},
+        "memx_trace_test": {"status": "pass", "checks": 5123},
+        "memx_exhaustive_test": {"status": "pass", "checks": 930427},
+        "memx_fault_test": {"status": "pass", "checks": 1149},
+        "memx_heap_test": {"status": "pass", "reported": "allocator tests passed"}
+      }
+    }
+  },
+  "emulated_allocator_diagnostics": {
+    "warning": "These are QEMU 10.2.2 user-mode/TCG measurements on one x86-64 host. They rank these exact statically linked binaries inside each emulator configuration only. Do not interpret them as native ISA performance or compare absolute values across architectures.",
+    "workload": {
+      "source": "bench/allocator_workload.c",
+      "slots": 10000,
+      "rounds": 3,
+      "operations_per_run": 67625,
+      "accepted_checksum": 13075,
+      "warmup_runs_per_allocator": 1,
+      "timed_runs_per_allocator": 15,
+      "ordering": "cyclic interleave with rotated starting allocator",
+      "linkage": "static",
+      "fairness_control": "Each non-MemX allocator was linked against the exact same strict-flags allocator_workload.c object used by that architecture's libc baseline; only the allocator library changed.",
+      "statistic": "median with median absolute deviation"
+    },
+    "competitor_support": {
+      "mimalloc": {
+        "mips32_big_endian": "build-and-run-pass",
+        "ppc64le": "build-and-run-pass",
+        "sparc64_big_endian": "build-and-run-pass"
+      },
+      "jemalloc": {
+        "mips32_big_endian": "build-and-run-pass",
+        "ppc64le": "build-and-run-pass",
+        "sparc64_big_endian": "build-and-run-pass with --with-lg-page=13 for the target 8192-byte page size"
+      },
+      "snmalloc": {
+        "mips32_big_endian": "compile-failed-unmodified",
+        "mips32_error": "upstream templates fail in address_cast/useless_ptr_from_addr on this 32-bit target",
+        "ppc64le": "build-and-run-pass",
+        "sparc64_big_endian": "build-and-run-pass"
+      },
+      "tcmalloc": {
+        "mips32_big_endian": "upstream-unsupported",
+        "ppc64le": "upstream-unsupported",
+        "sparc64_big_endian": "upstream-unsupported",
+        "reason": "Pinned tcmalloc/tcmalloc.cc accepts only x86-64, AArch64, or RISC-V and separately requires little endian. No competitor source was patched."
+      }
+    },
+    "mips32_big_endian": {
+      "emulator": "qemu-mips-static 10.2.2",
+      "libc_baseline": "OpenWrt musl",
+      "ranking_by_median_ns_per_operation": ["memx_heap", "mimalloc", "musl", "jemalloc"],
+      "memx_latency_reduction_percent": {
+        "vs_mimalloc": 20.924983,
+        "vs_musl": 47.567459,
+        "vs_jemalloc": 61.220281
+      },
+      "results": {
+        "memx_heap": {
+          "median_ns_per_operation": 408.428,
+          "mad_ns_per_operation": 13.205,
+          "min_ns_per_operation": 376.188,
+          "max_ns_per_operation": 458.244,
+          "binary_sha256": "3252178fecce598e0aa6bfb5a7eb67f4b27b9842125e92c1c4a367bb98020d6c",
+          "raw_ns_per_operation": [384.908, 383.109, 408.428, 421.032, 403.197, 376.188, 421.633, 409.689, 402.718, 458.244, 454.504, 440.883, 400.204, 388.46, 409.338]
+        },
+        "mimalloc": {
+          "median_ns_per_operation": 516.507,
+          "mad_ns_per_operation": 13.171,
+          "min_ns_per_operation": 462.459,
+          "max_ns_per_operation": 608.93,
+          "binary_sha256": "a5d45fe7dff692fc4bce269a4a25671ae5cce5cc25767f12faada1831682a6c9",
+          "raw_ns_per_operation": [469.263, 518.201, 529.678, 480.36, 486.437, 526.186, 522.961, 462.459, 518.957, 464.978, 608.93, 516.507, 508.482, 517.98, 500.519]
+        },
+        "musl": {
+          "median_ns_per_operation": 778.959,
+          "mad_ns_per_operation": 18.435,
+          "min_ns_per_operation": 718.396,
+          "max_ns_per_operation": 945.253,
+          "raw_ns_per_operation": [821.299, 778.959, 719.503, 771.939, 762.687, 945.253, 779.567, 740.024, 745.786, 797.394, 781.369, 744.076, 793.396, 779.874, 718.396]
+        },
+        "jemalloc": {
+          "median_ns_per_operation": 1053.2,
+          "mad_ns_per_operation": 46.468,
+          "min_ns_per_operation": 964.305,
+          "max_ns_per_operation": 1148.504,
+          "binary_sha256": "119e8d98ec1829a9cdd45d2d71da9c8993381c17879dc9cdff33a86290d9e57f",
+          "raw_ns_per_operation": [978.221, 1099.668, 996.346, 964.305, 1080.983, 983.62, 1148.504, 1074.518, 1076.68, 1053.2, 1045.601, 1097.992, 995.549, 1086.028, 981.058]
+        }
+      }
+    },
+    "ppc64le": {
+      "emulator": "qemu-ppc64le-static 10.2.2",
+      "libc_baseline": "Bootlin glibc",
+      "ranking_by_median_ns_per_operation": ["memx_heap", "snmalloc", "glibc", "jemalloc", "mimalloc"],
+      "memx_latency_reduction_percent": {
+        "vs_snmalloc": 12.634874,
+        "vs_glibc": 40.47006,
+        "vs_jemalloc": 54.829248,
+        "vs_mimalloc": 60.350444
+      },
+      "results": {
+        "memx_heap": {
+          "median_ns_per_operation": 351.891,
+          "mad_ns_per_operation": 9.873,
+          "min_ns_per_operation": 326.827,
+          "max_ns_per_operation": 373.511,
+          "binary_sha256": "b17c32aeaa5f1d4258e0645abab0e6e3b7113a592d4c26bac8ccdfc4048744af",
+          "raw_ns_per_operation": [361.337, 350.678, 358.067, 326.827, 365.683, 350.493, 369.169, 329.78, 373.511, 333.223, 355.427, 340.053, 351.891, 361.764, 350.688]
+        },
+        "snmalloc": {
+          "median_ns_per_operation": 402.782,
+          "mad_ns_per_operation": 15.846,
+          "min_ns_per_operation": 371.637,
+          "max_ns_per_operation": 425.046,
+          "binary_sha256": "f63e5a0d24c5b9cc9db25c319eb3e843d7305815cec9bde92674c90a025b69c0",
+          "raw_ns_per_operation": [371.637, 398.346, 383.68, 402.782, 400.106, 422.994, 392.042, 416.149, 415.999, 419.312, 413.907, 386.936, 420.914, 379.042, 425.046]
+        },
+        "glibc": {
+          "median_ns_per_operation": 591.116,
+          "mad_ns_per_operation": 26.432,
+          "min_ns_per_operation": 540.626,
+          "max_ns_per_operation": 745.796,
+          "raw_ns_per_operation": [615.603, 606.608, 554.671, 623.469, 613.878, 617.548, 599.742, 548.006, 745.796, 561.144, 578.31, 559.206, 584.793, 540.626, 591.116]
+        },
+        "jemalloc": {
+          "median_ns_per_operation": 779.024,
+          "mad_ns_per_operation": 33.719,
+          "min_ns_per_operation": 723.968,
+          "max_ns_per_operation": 837.751,
+          "binary_sha256": "8a509c42d19a838921af625e16a367cdd6c3caa90552cedea10bb126c5ed0ecb",
+          "raw_ns_per_operation": [779.024, 801.258, 770.085, 773.501, 816.553, 816.632, 776.468, 812.453, 745.305, 820.767, 723.968, 837.735, 755.972, 837.751, 731.942]
+        },
+        "mimalloc": {
+          "median_ns_per_operation": 887.503,
+          "mad_ns_per_operation": 31.907,
+          "min_ns_per_operation": 835.569,
+          "max_ns_per_operation": 1115.139,
+          "binary_sha256": "6a2d42f11691aaff6e629109b7b627ba04260573bfd0fb06f2232a59bf5e266c",
+          "raw_ns_per_operation": [908.411, 835.569, 949.591, 855.596, 1115.139, 887.503, 880.221, 860.629, 987.443, 972.161, 873.913, 983.516, 878.828, 995.143, 872.867]
+        }
+      }
+    },
+    "sparc64_big_endian": {
+      "emulator": "qemu-sparc64-static 10.2.2",
+      "target_page_size_bytes": 8192,
+      "jemalloc_configuration": "--with-lg-page=13",
+      "libc_baseline": "Bootlin glibc",
+      "ranking_by_median_ns_per_operation": ["memx_heap", "mimalloc", "snmalloc", "jemalloc", "glibc"],
+      "memx_latency_reduction_percent": {
+        "vs_mimalloc": 8.918447,
+        "vs_snmalloc": 13.209059,
+        "vs_jemalloc": 65.040357,
+        "vs_glibc": 93.728615
+      },
+      "results": {
+        "memx_heap": {
+          "median_ns_per_operation": 467.824,
+          "mad_ns_per_operation": 16.451,
+          "min_ns_per_operation": 421.009,
+          "max_ns_per_operation": 518.943,
+          "binary_sha256": "605223140641e1ae6998982a39f5340f14086bc2f5e6de6239a5ade218a593cf",
+          "raw_ns_per_operation": [481.44, 492.449, 467.943, 479.818, 461.555, 467.824, 451.373, 518.943, 509.931, 470.832, 442.126, 452.519, 430.079, 421.009, 422.851]
+        },
+        "mimalloc": {
+          "median_ns_per_operation": 513.632,
+          "mad_ns_per_operation": 20.16,
+          "min_ns_per_operation": 459.7,
+          "max_ns_per_operation": 565.637,
+          "binary_sha256": "b0b5195d486b5211692683024e0d8b1e576b19e04eec1069052e789b195de67b",
+          "raw_ns_per_operation": [565.637, 528.762, 528.733, 492.596, 499.127, 534.318, 533.444, 513.632, 528.005, 561.611, 493.472, 459.7, 496.656, 482.862, 475.285]
+        },
+        "snmalloc": {
+          "median_ns_per_operation": 539.024,
+          "mad_ns_per_operation": 17.273,
+          "min_ns_per_operation": 497.538,
+          "max_ns_per_operation": 560.137,
+          "binary_sha256": "d88fa8934135a958ca1ae68dae0e3efb3d0477eb9adbba074e120642bd983a39",
+          "raw_ns_per_operation": [500.235, 497.538, 499.394, 523.568, 531.127, 560.137, 556.297, 557.775, 548.542, 517.276, 554.219, 539.024, 519.872, 548.657, 555.827]
+        },
+        "jemalloc": {
+          "median_ns_per_operation": 1338.183,
+          "mad_ns_per_operation": 54.23,
+          "min_ns_per_operation": 1224.638,
+          "max_ns_per_operation": 1463.359,
+          "binary_sha256": "90ac82a52635036449d874c9a767ab5147cf102971b5e0e2bfb70043855af089",
+          "raw_ns_per_operation": [1260.573, 1423.343, 1302.772, 1224.638, 1240.285, 1342.564, 1399.593, 1463.359, 1427.27, 1390.406, 1321.512, 1289.843, 1293.223, 1392.413, 1338.183]
+        },
+        "glibc": {
+          "median_ns_per_operation": 7459.66,
+          "mad_ns_per_operation": 126.38,
+          "min_ns_per_operation": 7101.66,
+          "max_ns_per_operation": 7794.032,
+          "raw_ns_per_operation": [7498.957, 7459.66, 7333.28, 7607.259, 7794.032, 7101.66, 7321.159, 7337.412, 7417.484, 7139.724, 7480.515, 7603.196, 7368.508, 7646.31, 7555.079]
+        }
+      }
+    }
+  },
   "competitor_provenance": {
     "jemalloc": {
       "commit": "e36a0fa5bc1e1090362505ac4af4408466ba5163",
       "x86_64_integration": "Fedora libjemalloc.so.2 via LD_PRELOAD",
       "android_integration": "pinned source static link with C++ API disabled",
+      "emulated_isa_integration": "unmodified pinned source statically linked for MIPS32 BE, PPC64LE, and SPARC64 BE; SPARC configured for its 8 KiB target page size",
       "android_binary_sha256": "4840c28e45bc3e1474a58b336a9febeb97392fbbca8e2af4b6a9049e551f8d15"
     },
     "mimalloc": {
       "commit": "cd69707c3ca01a4c5fb358e8b92a710554f15356",
       "integration": "pinned source shared library via LD_PRELOAD",
+      "emulated_isa_integration": "unmodified pinned source statically linked for MIPS32 BE, PPC64LE, and SPARC64 BE",
       "x86_64_binary_sha256": "d773210ba939d934defb2c93c8749f3622240b96a868d96fa4e91f95bd131281",
       "android_binary_sha256": "cb7ab2553ef0c82a6e73c0548e7418da61ff31163c86b4f7c802b90fa7719788"
     },
     "snmalloc": {
       "commit": "a5f10eb6c048fc32bca2383daa8d6acbf82cfb7f",
       "integration": "pinned source shared shim via LD_PRELOAD",
+      "emulated_isa_integration": "unmodified static shim built for PPC64LE and SPARC64 BE; MIPS32 BE compilation failed",
       "x86_64_binary_sha256": "f9125c989cd2eb9c7b40153eab5f67cbf678c4c2eabb7f070fe139532298d485",
       "android_binary_sha256": "646c1aed7c22805ac9279ec7e814a228f8cf518a4dd65aeceeb7aba72cc59767"
     },
@@ -392,7 +962,8 @@
       "commit": "ea99e09225e4f518d3e201f2e9c33ea2f85d0413",
       "x86_64_integration": "pinned source statically linked executable",
       "x86_64_binary_sha256": "a143a67c4edafd742066b6a24a75b62f1eaabcb93db6951a7cac9f742fe46bfa",
-      "android_integration": "compile attempted but unsupported by pinned source"
+      "android_integration": "compile attempted but unsupported by pinned source",
+      "emulated_isa_integration": "not built: pinned source rejects MIPS, PowerPC, and SPARC architectures; it also rejects big-endian targets"
     },
     "memx": {
       "x86_64_heap_binary_sha256": "7c2fce05d49199530752843925ebef4b9e05354a8da3efcc1dff7c80f873baab",
@@ -401,14 +972,68 @@
       "android_checked_heap_binary_sha256": "6018d683a749a4f770d3ea3e79d27929aaad20367156e4db2dbf12c7af0cd0cb"
     }
   },
+  "independent_review": {
+    "reviewed_at": "2026-09-02T20:38:10+02:00",
+    "correctness_judge": {
+      "verdict": "pass",
+      "scope": "JSON validity; medians, MADs, minima/maxima, rankings, reductions, hashes, and claim wording"
+    },
+    "benchmark_methodology_judge": {
+      "verdict": "pass",
+      "scope": "exact-workload-object fairness, allocator override, competitor support, QEMU limitations, target page size, and workload design"
+    },
+    "edge_case_hunter": {
+      "verdict": "pass",
+      "scope": "ABI/toolchain/endian/page-size edge cases, stale contradictions, unsupported-target wording, and evidence consistency"
+    }
+  },
   "limitations": [
-    "No QEMU or other ISA emulation was used.",
-    "MIPS, PPC64LE, and SPARC64 OS images were mounted and inspected, but binaries were not executed without native hardware.",
+    "QEMU full-system runs establish MemX execution correctness and compatibility under the specified guest kernels; they do not validate those kernels. QEMU user-mode timings are diagnostic and cannot establish native MIPS, PPC64LE, or SPARC64 performance.",
+    "Absolute timings from different QEMU target architectures are not compared with each other.",
+    "MIPS32, PPC64LE, and SPARC64 results still require physical-hardware replication before any ISA performance claim.",
     "Android TCMalloc has no timing because the pinned upstream source rejected Android/Bionic during compilation.",
     "Windows x86 and x86-64 were executed through Wine compatibility layers, not on a native Windows kernel.",
     "No macOS or BSD build/runtime claim is made because no corresponding native runner or SDK is attached.",
     "Allocator timing excludes process startup because elapsed time is measured inside the shared workload.",
     "RSS, fragmentation, multi-thread scaling, power, and locked-frequency measurements are not part of this run.",
     "The Android core lookup table is a single-run diagnostic and is not used for allocator ranking."
-  ]
+  ],
+  "sparc64": {
+    "architecture": "sparc64",
+    "os": "Gentoo install-sparc64-minimal 20260826 (live CD)",
+    "emulated": true,
+    "emulator": "QEMU sun4u UltraSPARC-IIi",
+    "boot_method": "GRUB serial console (console=ttyS0,9600)",
+    "test_results": {
+      "memx_test": {
+        "exit_code": 0,
+        "status": "pass"
+      },
+      "memx_baseline_test": {
+        "exit_code": 0,
+        "status": "pass"
+      },
+      "memx_trace_test": {
+        "exit_code": 0,
+        "status": "pass"
+      },
+      "memx_exhaustive_test": {
+        "exit_code": 0,
+        "status": "pass"
+      },
+      "memx_fault_test": {
+        "exit_code": 0,
+        "status": "pass"
+      },
+      "memx_heap_test": {
+        "exit_code": 0,
+        "status": "pass"
+      },
+      "memx_allocator_workload": {
+        "exit_code": 0,
+        "status": "pass"
+      }
+    },
+    "evidence_note": "Raw serial-control bytes were removed; structured pass counts are retained in emulated_guest_execution_validation.sparc64_big_endian."
+  }
 }
