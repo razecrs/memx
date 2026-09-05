@@ -162,6 +162,37 @@ The benchmark verifies every populated granule against every structure before
 timing. It still remains a microbenchmark and does not establish allocator
 superiority.
 
+## Allocation pattern comparison
+
+One workload shape does not characterise an allocator. `memx_pattern_bench`
+runs seven single-threaded shapes — `mixed`, `small`, `large`, `lifo`, `fifo`,
+`churn`, and `realloc` — and `tools/compare_allocators.sh` reports the median
+nanoseconds per operation for MemX beside any allocators given as `LD_PRELOAD`
+shared objects:
+
+```sh
+tools/compare_allocators.sh build-current \
+    snmalloc=/path/to/libsnmallocshim.so \
+    mimalloc=/path/to/libmimalloc.so
+```
+
+`MEMX_LIVE`, `MEMX_ROUNDS`, `MEMX_SAMPLES`, and `MEMX_PATTERNS` override the
+defaults (50000 live objects, 3 rounds, 9 samples, all patterns).
+The runner rejects failed child processes, loader/benchmark diagnostics, and
+malformed results. Operation counts and checksums must agree across samples
+and allocators for each pattern. Both odd and even sample counts are supported.
+
+Every allocator, MemX included, is measured through `LD_PRELOAD` into the same
+`memx_pattern_bench_system` binary, using the `memx_malloc_shim` interposer.
+This keeps call paths comparable: direct linking and interposition can have
+different dispatch and optimization costs; static linking alone does not
+guarantee inlining. `memx_pattern_bench` links the heap directly and is the right
+target for profiling MemX itself, not for cross-allocator claims.
+
+`memx_malloc_shim` is a benchmark interposer, not a production one. Nested
+allocations made by the allocator itself, and anything allocated before the
+heap exists, come from a bump arena and are never reclaimed.
+
 ## Trace generation and replay
 
 Generate a deterministic allocator-shaped lifecycle trace:

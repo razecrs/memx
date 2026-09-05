@@ -6,6 +6,7 @@
 
 #include <limits.h>
 #include <stdio.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -116,18 +117,21 @@ static size_t memx_host_page_size(void);
 
 /*
  * Transparent-huge-page size, or 0 when the platform does not report one.
- * Probed once; the value is a kernel constant for the life of the process.
+ * The first completed probe is published atomically; concurrent cold probes
+ * are allowed to duplicate the read.
  */
 static size_t
 memx_host_huge_page_size(void) {
 #if defined(__linux__) && defined(MADV_HUGEPAGE)
-    static size_t cached_size;
-    static int probed;
+    static atomic_size_t cached_size = SIZE_MAX;
     FILE *file;
     size_t value = 0U;
+    size_t expected = SIZE_MAX;
+    const size_t cached = atomic_load_explicit(
+        &cached_size, memory_order_relaxed);
 
-    if (probed != 0) {
-        return cached_size;
+    if (cached != SIZE_MAX) {
+        return cached;
     }
     file = fopen("/sys/kernel/mm/transparent_hugepage/hpage_pmd_size", "re");
     if (file != NULL) {
@@ -136,12 +140,14 @@ memx_host_huge_page_size(void) {
         }
         (void)fclose(file);
     }
-    if (value != 0U && (value & (value - 1U)) == 0U
-        && value > memx_host_page_size()) {
-        cached_size = value;
+    if (value == 0U || (value & (value - 1U)) != 0U
+        || value <= memx_host_page_size()) {
+        value = 0U;
     }
-    probed = 1;
-    return cached_size;
+    (void)atomic_compare_exchange_strong_explicit(
+        &cached_size, &expected, value,
+        memory_order_relaxed, memory_order_relaxed);
+    return atomic_load_explicit(&cached_size, memory_order_relaxed);
 #else
     return 0U;
 #endif

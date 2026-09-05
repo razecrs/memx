@@ -15,6 +15,19 @@
 #define MEMX_HEAP_LARGE_MIN_BUCKETS 64U
 #define MEMX_HEAP_SPAN_MAGIC UINT64_C(0x6d656d787370616e)
 
+/*
+ * In a position-independent build the compiler would otherwise pick the
+ * general-dynamic TLS model, putting a __tls_get_addr call on the allocation
+ * fast path. The allocator is always present from program start, never
+ * dlopened late, so initial-exec is both valid and far cheaper. A non-PIC
+ * build already gets local-exec and needs no attribute.
+ */
+#if defined(__PIC__) && (defined(__GNUC__) || defined(__clang__))
+#define MEMX_HEAP_TLS_MODEL __attribute__((tls_model("initial-exec")))
+#else
+#define MEMX_HEAP_TLS_MODEL
+#endif
+
 #if defined(__GNUC__) || defined(__clang__)
 #define MEMX_HEAP_NOINLINE __attribute__((noinline))
 #elif defined(_MSC_VER)
@@ -121,6 +134,14 @@ struct memx_heap {
     size_t large_bucket_count;
     size_t large_count;
     memx_heap_cache_t *caches;
+    /*
+     * The sole thread cache while exactly one has ever been created for this
+     * heap, otherwise NULL. It lets the free path skip reading the freed
+     * block's owner field, which is otherwise a dependent load into a cold
+     * object header and dominates the cost of freeing a small object. Once a
+     * second cache appears this is cleared and never set again.
+     */
+    _Atomic(memx_heap_cache_t *) exclusive_cache;
 
     atomic_size_t live_requested_bytes;
     atomic_size_t peak_live_requested_bytes;
@@ -148,8 +169,10 @@ static const size_t memx_heap_class_sizes[MEMX_HEAP_CLASS_COUNT] = {
     6144U, 8192U
 };
 
-static _Thread_local memx_heap_cache_t *memx_heap_tls_caches;
-static _Thread_local memx_heap_cache_t *memx_heap_tls_last_cache;
+static _Thread_local memx_heap_cache_t *memx_heap_tls_caches
+    MEMX_HEAP_TLS_MODEL;
+static _Thread_local memx_heap_cache_t *memx_heap_tls_last_cache
+    MEMX_HEAP_TLS_MODEL;
 
 static bool
 memx_heap_power_of_two(size_t value) {
@@ -258,6 +281,8 @@ memx_heap_create_cache(memx_heap_t *heap) {
     memx_heap_tls_caches = cache;
     memx_heap_tls_last_cache = cache;
     (void)pthread_mutex_lock(&heap->admin_lock);
+    atomic_store_explicit(&heap->exclusive_cache,
+        heap->caches == NULL ? cache : NULL, memory_order_release);
     cache->heap_next = heap->caches;
     heap->caches = cache;
     (void)pthread_mutex_unlock(&heap->admin_lock);
@@ -391,6 +416,8 @@ memx_heap_create_span_locked(memx_heap_t *heap, size_t class_index) {
     size_t block_count;
     size_t index;
     size_t chunk_count = 0U;
+    const size_t chunk_limit = heap->config.cache_batch < heap->config.cache_limit
+        ? heap->config.cache_batch : heap->config.cache_limit;
     memx_heap_span_t *span;
     memx_heap_block_t *chunk_head = NULL;
     memx_heap_block_t *chunk_tail = NULL;
@@ -419,7 +446,7 @@ memx_heap_create_span_locked(memx_heap_t *heap, size_t class_index) {
             chunk_tail = block;
         }
         chunk_count += 1U;
-        if (chunk_count == heap->config.cache_batch) {
+        if (chunk_count == chunk_limit) {
             memx_heap_push_central_chunk_locked(
                 heap, class_index, chunk_head, chunk_tail, chunk_count);
             chunk_head = NULL;
@@ -434,11 +461,18 @@ memx_heap_create_span_locked(memx_heap_t *heap, size_t class_index) {
     return true;
 }
 
+static void memx_heap_trim_cache(
+    memx_heap_t *heap, memx_heap_cache_t *cache, size_t class_index);
+
 static void
-memx_heap_drain_remote(memx_heap_cache_t *cache, size_t class_index) {
+memx_heap_drain_remote(
+    memx_heap_t *heap, memx_heap_cache_t *cache, size_t class_index) {
     memx_heap_block_t *block;
     (void)pthread_mutex_lock(&cache->remote_lock);
     block = cache->remote[class_index];
+    cache->remote[class_index] = NULL;
+    cache->remote_count[class_index] = 0U;
+    (void)pthread_mutex_unlock(&cache->remote_lock);
     while (block != NULL) {
         memx_heap_block_t *next = block->fields.link.next;
         if (cache->local[class_index] == NULL) {
@@ -447,11 +481,9 @@ memx_heap_drain_remote(memx_heap_cache_t *cache, size_t class_index) {
         block->fields.link.next = cache->local[class_index];
         cache->local[class_index] = block;
         cache->local_count[class_index] += 1U;
+        memx_heap_trim_cache(heap, cache, class_index);
         block = next;
     }
-    cache->remote[class_index] = NULL;
-    cache->remote_count[class_index] = 0U;
-    (void)pthread_mutex_unlock(&cache->remote_lock);
 }
 
 static MEMX_HEAP_NOINLINE void
@@ -464,9 +496,9 @@ memx_heap_flush_excess_slow(
     size_t moved = cache->spare_count[class_index];
 
     /* The filled segment becomes the spare and the previous spare, if any,
-     * goes back to the central bin as one splice. The thread therefore keeps
-     * up to cache_limit blocks and never walks the list to find a split
-     * point. */
+     * goes back to the central bin as one splice. Refill segments can exceed
+     * half the budget, so the caller checks the combined count as well as
+     * the hot segment's threshold. No walk to find a split point is needed. */
     if (first != NULL && tail != NULL && moved != 0U
 #if SIZE_MAX > UINT32_MAX
         && moved <= (size_t)UINT32_MAX
@@ -483,6 +515,20 @@ memx_heap_flush_excess_slow(
     cache->local[class_index] = NULL;
     cache->local_tail[class_index] = NULL;
     cache->local_count[class_index] = 0U;
+}
+
+static void
+memx_heap_trim_cache(
+    memx_heap_t *heap, memx_heap_cache_t *cache, size_t class_index) {
+    const size_t local = cache->local_count[class_index];
+    assert(local <= heap->config.cache_limit);
+    if (local >= heap->config.cache_limit / 2U
+#if SIZE_MAX > UINT32_MAX
+        || local >= (size_t)UINT32_MAX
+#endif
+        || cache->spare_count[class_index] > heap->config.cache_limit - local) {
+        memx_heap_flush_excess_slow(heap, cache, class_index);
+    }
 }
 
 /* Promote the spare segment when the hot segment runs dry. O(1) and needs no
@@ -515,7 +561,10 @@ memx_heap_refill(
     if (memx_heap_adopt_spare(cache, class_index)) {
         return cache->local[class_index];
     }
-    memx_heap_drain_remote(cache, class_index);
+    memx_heap_drain_remote(heap, cache, class_index);
+    if (cache->local[class_index] == NULL) {
+        (void)memx_heap_adopt_spare(cache, class_index);
+    }
     if (cache->local[class_index] != NULL) {
         return cache->local[class_index];
     }
@@ -1190,20 +1239,29 @@ memx_heap_route_small(
     memx_heap_block_t *block,
     size_t class_index) {
     memx_heap_cache_t *owner;
-    memx_heap_cache_t *current;
-    size_t requested_size;
-    requested_size = block->fields.requested_size;
-    owner = block->fields.link.owner;
+    memx_heap_cache_t *current = memx_heap_tls_last_cache;
     if (heap->config.collect_activity_statistics) {
         (void)atomic_fetch_sub_explicit(
-            &heap->live_requested_bytes, requested_size, memory_order_relaxed);
+            &heap->live_requested_bytes,
+            block->fields.requested_size, memory_order_relaxed);
         (void)atomic_fetch_add_explicit(
             &heap->frees, 1U, memory_order_relaxed);
     }
 
-    current = memx_heap_tls_last_cache;
-    if (owner != current) {
-        current = memx_heap_find_cache(heap);
+    /*
+     * When this thread holds the heap's only cache, every live block was
+     * allocated by it, so its owner is known without touching the block. That
+     * turns the fast path of a free into pure stores.
+     */
+    if (current != NULL
+        && current == atomic_load_explicit(
+            &heap->exclusive_cache, memory_order_acquire)) {
+        owner = current;
+    } else {
+        owner = block->fields.link.owner;
+        if (owner != current) {
+            current = memx_heap_find_cache(heap);
+        }
     }
     if (owner == current && current != NULL) {
         if (current->local[class_index] == NULL) {
@@ -1212,10 +1270,7 @@ memx_heap_route_small(
         block->fields.link.next = current->local[class_index];
         current->local[class_index] = block;
         current->local_count[class_index] += 1U;
-        if (current->local_count[class_index]
-            >= heap->config.cache_limit / 2U) {
-            memx_heap_flush_excess_slow(heap, current, class_index);
-        }
+        memx_heap_trim_cache(heap, current, class_index);
         return;
     }
     if (owner != NULL) {

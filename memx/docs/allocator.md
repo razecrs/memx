@@ -47,12 +47,14 @@ allocated until heap destruction.
 
 ## Concurrency boundary
 
-Small-block allocation state and statistics use C atomics. Central bins,
-span creation, large-allocation records, and every MemX lookup/mutation are
-protected by the heap mutex. Remote queues have a per-cache mutex.
+Small-block allocation state and statistics use C atomics. Central bins use
+per-class locks; span creation and MemX index access use the arena lock;
+large-allocation records and cache registration use the administrative lock.
+Remote queues have a per-cache mutex.
 
-The lock order avoids holding a remote-queue mutex while acquiring the heap
-mutex. Cache metadata is retained until heap destruction, so a remote free
+The lock order avoids holding a remote-queue mutex while acquiring a class
+lock. Span creation can acquire the arena lock while holding a class lock,
+but never in the reverse order. Cache metadata is retained until heap destruction, so a remote free
 never observes a reclaimed owner-cache record.
 
 This is not Gate 9/concurrent MemX. The embedding program must join allocator
@@ -85,6 +87,9 @@ span size.
 Thread caches keep a tail pointer per class, so returning an over-full cache to
 the central bins is a constant-time list splice rather than a walk. The
 allocation path prefetches the next free block when it pops one.
+The cache ceiling bounds the combined local and spare segments, including
+after remote queues are drained. Refill batches larger than the configured
+ceiling are capped; pending remote queues remain separately unbounded.
 
 Each committed span is represented by one MemX handle pointing to immutable
 span metadata embedded at the beginning of the span. A maximally aligned block

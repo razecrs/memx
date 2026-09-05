@@ -27,10 +27,12 @@ typedef struct memx_heap_config {
     size_t reserve_size;
     unsigned span_shift;
 
-    /* Objects moved between a central bin and a thread cache per refill. */
+    /* Target refill batch; capped by cache_limit and available chunk size. */
     size_t cache_batch;
 
-    /* Maximum cached free objects per class and thread. */
+    /* Maximum local + spare free objects per class and thread. Pending
+     * remote frees are a separate, currently unbounded queue; the limit is
+     * enforced when the owning thread drains that queue. */
     size_t cache_limit;
 
     /* Exact activity/byte counters add synchronization to hot operations. */

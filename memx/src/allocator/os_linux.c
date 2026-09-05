@@ -4,6 +4,7 @@
 
 #include "internal.h"
 
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/mman.h>
@@ -24,19 +25,21 @@ memx_os_page_size(void) {
     return result > 0 ? (size_t)result : 4096U;
 }
 
-/* Read the kernel's PMD-backed transparent huge page size once. A missing or
- * unparsable value means huge pages are unavailable and the caller falls back
- * to base-page granularity. */
+/* Read the kernel's PMD-backed transparent huge page size and publish the
+ * first completed result atomically. Concurrent cold callers may duplicate
+ * the probe; a missing or unparsable value caches unavailable (zero). */
 size_t
 memx_os_huge_page_size(void) {
 #if defined(MADV_HUGEPAGE)
-    static size_t cached_size;
-    static bool probed;
+    static atomic_size_t cached_size = SIZE_MAX;
     FILE *file;
     size_t value = 0U;
+    size_t expected = SIZE_MAX;
+    const size_t cached = atomic_load_explicit(
+        &cached_size, memory_order_relaxed);
 
-    if (probed) {
-        return cached_size;
+    if (cached != SIZE_MAX) {
+        return cached;
     }
     file = fopen("/sys/kernel/mm/transparent_hugepage/hpage_pmd_size", "re");
     if (file != NULL) {
@@ -45,11 +48,13 @@ memx_os_huge_page_size(void) {
         }
         (void)fclose(file);
     }
-    if (memx_os_power_of_two(value) && value > memx_os_page_size()) {
-        cached_size = value;
+    if (!memx_os_power_of_two(value) || value <= memx_os_page_size()) {
+        value = 0U;
     }
-    probed = true;
-    return cached_size;
+    (void)atomic_compare_exchange_strong_explicit(
+        &cached_size, &expected, value,
+        memory_order_relaxed, memory_order_relaxed);
+    return atomic_load_explicit(&cached_size, memory_order_relaxed);
 #else
     return 0U;
 #endif
