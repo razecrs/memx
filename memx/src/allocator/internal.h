@@ -11,6 +11,14 @@ typedef struct memx_os_range {
 
 size_t memx_os_page_size(void);
 
+/* Transparent-huge-page size, or 0 when the platform cannot back the arena
+ * with large pages. Callers align reservations and commits to this value so a
+ * first touch can fault in a whole huge page instead of collapsing later. */
+size_t memx_os_huge_page_size(void);
+
+/* Best-effort request that a reserved range be backed by huge pages. */
+void memx_os_advise_huge_pages(void *base, size_t size);
+
 bool memx_os_reserve_aligned(
     size_t size,
     size_t alignment,

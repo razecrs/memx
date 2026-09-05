@@ -5,6 +5,7 @@
 #include "internal.h"
 
 #include <stdint.h>
+#include <stdio.h>
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -21,6 +22,49 @@ size_t
 memx_os_page_size(void) {
     const long result = sysconf(_SC_PAGESIZE);
     return result > 0 ? (size_t)result : 4096U;
+}
+
+/* Read the kernel's PMD-backed transparent huge page size once. A missing or
+ * unparsable value means huge pages are unavailable and the caller falls back
+ * to base-page granularity. */
+size_t
+memx_os_huge_page_size(void) {
+#if defined(MADV_HUGEPAGE)
+    static size_t cached_size;
+    static bool probed;
+    FILE *file;
+    size_t value = 0U;
+
+    if (probed) {
+        return cached_size;
+    }
+    file = fopen("/sys/kernel/mm/transparent_hugepage/hpage_pmd_size", "re");
+    if (file != NULL) {
+        if (fscanf(file, "%zu", &value) != 1) {
+            value = 0U;
+        }
+        (void)fclose(file);
+    }
+    if (memx_os_power_of_two(value) && value > memx_os_page_size()) {
+        cached_size = value;
+    }
+    probed = true;
+    return cached_size;
+#else
+    return 0U;
+#endif
+}
+
+void
+memx_os_advise_huge_pages(void *base, size_t size) {
+#if defined(MADV_HUGEPAGE)
+    if (base != NULL && size != 0U) {
+        (void)madvise(base, size, MADV_HUGEPAGE);
+    }
+#else
+    (void)base;
+    (void)size;
+#endif
 }
 
 bool

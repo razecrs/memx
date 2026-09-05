@@ -5,6 +5,7 @@
 #include "memx/memx.h"
 
 #include <limits.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -111,46 +112,114 @@ memx_overlay_platform_supported(void) {
 #endif
 }
 
+static size_t memx_host_page_size(void);
+
+/*
+ * Transparent-huge-page size, or 0 when the platform does not report one.
+ * Probed once; the value is a kernel constant for the life of the process.
+ */
+static size_t
+memx_host_huge_page_size(void) {
+#if defined(__linux__) && defined(MADV_HUGEPAGE)
+    static size_t cached_size;
+    static int probed;
+    FILE *file;
+    size_t value = 0U;
+
+    if (probed != 0) {
+        return cached_size;
+    }
+    file = fopen("/sys/kernel/mm/transparent_hugepage/hpage_pmd_size", "re");
+    if (file != NULL) {
+        if (fscanf(file, "%zu", &value) != 1) {
+            value = 0U;
+        }
+        (void)fclose(file);
+    }
+    if (value != 0U && (value & (value - 1U)) == 0U
+        && value > memx_host_page_size()) {
+        cached_size = value;
+    }
+    probed = 1;
+    return cached_size;
+#else
+    return 0U;
+#endif
+}
+
+/*
+ * Reserves the dense overlay between two inaccessible guard pages.
+ *
+ * When huge pages are requested and available, the writable payload is placed
+ * at a huge-page-aligned address, its length is rounded to that size, and the
+ * range is advised MADV_HUGEPAGE; an unaligned range would leave the kernel
+ * nothing it could back with a huge page. out_page_size then reports the huge
+ * page size, because that is the granularity at which touching one dense
+ * granule makes memory resident. Callers use it for footprint accounting, so
+ * reporting the base page size here would understate real residency.
+ */
 static memx_handle_t *
 memx_overlay_allocate(
     size_t bytes,
+    bool huge_pages,
     size_t *out_reserved_bytes,
     size_t *out_page_size,
     void **out_mapping) {
 #if defined(__linux__)
     const long page_result = sysconf(_SC_PAGESIZE);
     size_t page_size;
+    size_t granularity;
     size_t rounded;
+    size_t guard;
     unsigned char *mapping;
+    unsigned char *payload;
     if (page_result <= 0) {
         return NULL;
     }
     page_size = (size_t)page_result;
-    if ((page_size & (page_size - 1U)) != 0U
-        || bytes > SIZE_MAX - (page_size - 1U)) {
+    if ((page_size & (page_size - 1U)) != 0U) {
         return NULL;
     }
-    rounded = (bytes + page_size - 1U) & ~(page_size - 1U);
-    if (page_size > SIZE_MAX / 2U
-        || rounded > SIZE_MAX - page_size * 2U) {
+    granularity = page_size;
+    if (huge_pages) {
+        const size_t huge_page_size = memx_host_huge_page_size();
+        if (huge_page_size > page_size && bytes >= huge_page_size) {
+            granularity = huge_page_size;
+        }
+    }
+    if (bytes > SIZE_MAX - (granularity - 1U)) {
         return NULL;
     }
-    *out_reserved_bytes = rounded + page_size * 2U;
+    rounded = (bytes + granularity - 1U) & ~(granularity - 1U);
+    /* Two guard slots of the alignment granularity leave room to align the
+     * payload upward and still keep an inaccessible page on each side. */
+    guard = granularity;
+    if (guard > SIZE_MAX / 2U || rounded > SIZE_MAX - guard * 2U) {
+        return NULL;
+    }
+    *out_reserved_bytes = rounded + guard * 2U;
     mapping = mmap(NULL, *out_reserved_bytes, PROT_NONE,
         MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (mapping == MAP_FAILED) {
         return NULL;
     }
-    if (mprotect(mapping + page_size, rounded,
-            PROT_READ | PROT_WRITE) != 0) {
+    payload = (unsigned char *)(void *)((((uintptr_t)mapping + 1U)
+        + (uintptr_t)granularity - 1U) & ~((uintptr_t)granularity - 1U));
+    if (mprotect(payload, rounded, PROT_READ | PROT_WRITE) != 0) {
         (void)munmap(mapping, *out_reserved_bytes);
         return NULL;
     }
-    *out_page_size = page_size;
+#if defined(MADV_HUGEPAGE)
+    if (granularity != page_size) {
+        (void)madvise(payload, rounded, MADV_HUGEPAGE);
+    }
+#endif
+    *out_page_size = granularity;
     *out_mapping = mapping;
-    return (memx_handle_t *)(void *)(mapping + page_size);
+    return (memx_handle_t *)(void *)payload;
 #else
     (void)bytes;
+    (void)huge_pages;
     (void)out_reserved_bytes;
     (void)out_page_size;
     (void)out_mapping;
@@ -229,6 +298,7 @@ memx_config_default(void) {
     config.region_shift = 21U;
     config.granule_shift = 12U;
     config.address_bits = (unsigned)(sizeof(uintptr_t) * CHAR_BIT);
+    config.overlay_huge_pages = false;
     return config;
 }
 
@@ -789,8 +859,8 @@ memx_index_optimize_overlay(memx_index_t *index) {
             return MEMX_ERROR_INVALID_ARGUMENT;
         }
     }
-    entries = memx_overlay_allocate(bytes, &reserved_bytes, &page_size,
-        &mapping);
+    entries = memx_overlay_allocate(bytes, index->config.overlay_huge_pages,
+        &reserved_bytes, &page_size, &mapping);
     if (entries == NULL) {
         return MEMX_ERROR_OUT_OF_MEMORY;
     }

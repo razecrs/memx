@@ -21,10 +21,16 @@ production interposition.
 
 1. MemX indexes every committed small-object span.
 2. The Linux/Android OS provider reserves an aligned `PROT_NONE` arena,
-   commits spans with `mprotect`, and creates independent large mappings.
-3. A fixed-span manager commits 64 KiB spans on demand from the bounded arena.
-4. Ten payload size classes cover 16 through 8192 bytes. The 4096- and
-   8192-byte classes keep common medium allocations off the mapping path.
+   commits arena chunks with `mprotect`, and creates independent large
+   mappings. Commits are rounded up to the transparent-huge-page size where
+   the platform reports one, so a first touch can fault in a whole huge page
+   rather than depending on later collapse.
+3. A fixed-span manager hands out 64 KiB spans on demand from the bounded
+   arena, backed by those larger commit chunks.
+4. Nineteen payload size classes cover 16 through 8192 bytes at two classes per
+   power of two (2^n and 1.5 * 2^n), bounding internal fragmentation at 50% of
+   the request instead of 100%. The 4096-, 6144- and 8192-byte classes keep
+   common medium allocations off the mapping path.
 5. Small allocations use intrusive free blocks and per-span metadata.
 6. Large/aligned allocation, `calloc`, `realloc`, checked free, and usable-size
    APIs are present with overflow checks.
@@ -58,14 +64,27 @@ heap operations before `memx_heap_destroy`.
 The default geometry is:
 
 ```text
-reserved arena: 256 MiB
-span:            64 KiB
-MemX region:     64 KiB
-MemX granule:     4 KiB
+reserved arena:  256 MiB
+commit chunk:      huge page size, else span size
+span:             64 KiB
+MemX region:      64 KiB
+MemX granule:      4 KiB
+size classes:     19 (16..8192, two per power of two)
 cache refill:      256 blocks
 cache ceiling:     256 blocks / class / thread
 activity counters: disabled by default
 ```
+
+A one-byte-per-span side table maps an arena offset to its size class. The
+free path reads that table instead of the span header, so releasing a block
+touches only the block's own page; the table for the whole arena is 4 KiB and
+stays cache resident. `arena_committed_bytes` reports actual committed bytes,
+which with huge-page commit granularity can exceed `committed_spans` times the
+span size.
+
+Thread caches keep a tail pointer per class, so returning an over-full cache to
+the central bins is a constant-time list splice rather than a walk. The
+allocation path prefetches the next free block when it pops one.
 
 Each committed span is represented by one MemX handle pointing to immutable
 span metadata embedded at the beginning of the span. A maximally aligned block

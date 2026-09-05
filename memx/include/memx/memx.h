@@ -101,6 +101,22 @@ typedef struct memx_config {
     /* SPARSE only: usable low address bits, e.g. 48 on x86-64. */
     unsigned address_bits;
 
+    /*
+     * Back a frozen dense overlay with transparent huge pages where the
+     * platform supports them. A huge page becomes resident as soon as any
+     * granule inside it is dense, and memx_stats_t reports the resulting
+     * footprint at that granularity.
+     *
+     * Off by default because it only pays off for overlays that are already
+     * near fully dense. Measured on a 2048-region mixed layout at 25% dense
+     * (see docs/benchmark.md), it cost 4x the resident metadata and made
+     * trusted lookup about 1.8x slower, because inflating the overlay past the
+     * cache-resident working set costs more than the saved TLB misses. On a
+     * fully dense layout, where nothing is inflated, it made trusted lookup
+     * about 29% faster at identical footprint.
+     */
+    bool overlay_huge_pages;
+
     /* Optional allocator; both callbacks must be supplied or both omitted. */
     memx_allocator_t allocator;
 } memx_config_t;

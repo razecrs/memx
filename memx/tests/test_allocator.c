@@ -193,6 +193,37 @@ test_realloc_copies_only_requested_bytes(void) {
     memx_heap_destroy(heap);
 }
 
+/* Every request from 1 byte to the largest small class must land in the
+ * tightest class that fits: usable size never shrinks as the request grows,
+ * always covers the request, and never wastes a full doubling. */
+static void
+test_size_class_mapping_is_tight(void) {
+    memx_heap_t *heap = create_heap();
+    size_t previous = 0U;
+    size_t size;
+    if (heap == NULL) {
+        return;
+    }
+    for (size = 1U; size <= 8192U; ++size) {
+        void *pointer = memx_heap_malloc(heap, size);
+        size_t usable;
+        EXPECT_TRUE(pointer != NULL);
+        if (pointer == NULL) {
+            break;
+        }
+        usable = memx_heap_usable_size(heap, pointer);
+        EXPECT_TRUE(usable >= size);
+        EXPECT_TRUE(usable >= previous);
+        if (size > 16U) {
+            EXPECT_TRUE(usable < size * 2U);
+        }
+        previous = usable;
+        EXPECT_TRUE(memx_heap_free(heap, pointer));
+    }
+    memx_heap_thread_detach(heap);
+    memx_heap_destroy(heap);
+}
+
 static void
 test_failed_realloc_preserves_allocation(void) {
     memx_heap_t *heap = create_heap();
@@ -235,12 +266,12 @@ test_realloc_in_place(void) {
     if (pointer != NULL) {
         memset(pointer, 0x5a, 33U);
         memx_heap_get_stats(heap, &before);
-        replacement = memx_heap_realloc(heap, pointer, 63U);
+        replacement = memx_heap_realloc(heap, pointer, 47U);
         EXPECT_TRUE(replacement == pointer);
-        EXPECT_EQ_SIZE(memx_heap_usable_size(heap, replacement), 64U);
+        EXPECT_EQ_SIZE(memx_heap_usable_size(heap, replacement), 48U);
         memx_heap_get_stats(heap, &after);
         EXPECT_EQ_SIZE(after.live_requested_bytes,
-            before.live_requested_bytes + 30U);
+            before.live_requested_bytes + 14U);
         replacement = memx_heap_realloc(heap, replacement, 17U);
         EXPECT_TRUE(replacement == pointer);
         memx_heap_get_stats(heap, &after);
@@ -766,6 +797,7 @@ main(void) {
     test_size_classes_and_large_allocations();
     test_calloc_realloc_and_alignment();
     test_realloc_copies_only_requested_bytes();
+    test_size_class_mapping_is_tight();
     test_failed_realloc_preserves_allocation();
     test_realloc_in_place();
     test_unchecked_realloc();
