@@ -1,10 +1,10 @@
 # Out-of-tree CMake and generated build directories are published as release
 # assets, not committed as source.
-/build*/
+/memx/build*/
 
 # Local prior-art checkouts retain their own Git histories. Reproducible commit
 # identifiers live in the project evidence; clean snapshots are release assets.
-/research/
+/memx/research/
 
 # Python bytecode is generated from the checked-in tooling.
 __pycache__/
@@ -20,4 +20,4 @@ perf.data*
 
 # Agent session transcripts are local working notes, not project evidence.
 codex-session-*.md
-/build-final-*
+/memx/build-final-*

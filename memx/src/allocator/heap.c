@@ -12,6 +12,7 @@
 #include <pthread.h>
 
 #define MEMX_HEAP_CLASS_COUNT 10U
+#define MEMX_HEAP_LARGE_MIN_BUCKETS 64U
 #define MEMX_HEAP_SPAN_MAGIC UINT64_C(0x6d656d787370616e)
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -96,7 +97,9 @@ struct memx_heap {
     memx_heap_block_t *central[MEMX_HEAP_CLASS_COUNT];
     size_t central_count[MEMX_HEAP_CLASS_COUNT];
     memx_heap_span_t *spans;
-    memx_heap_large_t *large_allocations;
+    memx_heap_large_t **large_buckets;
+    size_t large_bucket_count;
+    size_t large_count;
     memx_heap_cache_t *caches;
 
     atomic_size_t live_requested_bytes;
@@ -106,7 +109,6 @@ struct memx_heap {
     atomic_size_t frees;
     atomic_size_t remote_frees;
     atomic_size_t invalid_frees;
-    atomic_size_t active_large_allocations;
     atomic_size_t thread_cache_count;
 };
 
@@ -473,6 +475,73 @@ memx_heap_allocate_small(
     return (void *)(block + 1);
 }
 
+/* Hash the address without reading caller memory, including invalid pointers.
+ * All bucket/chain access and rehashing is serialized by heap->lock. */
+static size_t
+memx_heap_large_bucket(const void *pointer, size_t bucket_count) {
+    uint64_t value = (uint64_t)(uintptr_t)pointer;
+    value ^= value >> 33U;
+    value *= UINT64_C(0xff51afd7ed558ccd);
+    value ^= value >> 33U;
+    value *= UINT64_C(0xc4ceb9fe1a85ec53);
+    value ^= value >> 33U;
+    return (size_t)value & (bucket_count - 1U);
+}
+
+static bool
+memx_heap_large_rehash_locked(memx_heap_t *heap, size_t bucket_count) {
+    memx_heap_large_t **buckets;
+    size_t index;
+    if (bucket_count > SIZE_MAX / sizeof(*buckets)) {
+        return false;
+    }
+    buckets = calloc(bucket_count, sizeof(*buckets));
+    if (buckets == NULL) {
+        return false;
+    }
+    for (index = 0U; index < heap->large_bucket_count; ++index) {
+        memx_heap_large_t *large = heap->large_buckets[index];
+        while (large != NULL) {
+            memx_heap_large_t *next = large->next;
+            const size_t bucket = memx_heap_large_bucket(
+                large->pointer, bucket_count);
+            large->next = buckets[bucket];
+            buckets[bucket] = large;
+            large = next;
+        }
+    }
+    free(heap->large_buckets);
+    heap->large_buckets = buckets;
+    heap->large_bucket_count = bucket_count;
+    return true;
+}
+
+static bool
+memx_heap_large_reserve_locked(memx_heap_t *heap) {
+    size_t capacity = heap->large_bucket_count;
+    if (heap->large_count < capacity) {
+        return true;
+    }
+    if (capacity > SIZE_MAX / 2U) {
+        return false;
+    }
+    capacity = capacity == 0U ? MEMX_HEAP_LARGE_MIN_BUCKETS : capacity * 2U;
+    return memx_heap_large_rehash_locked(heap, capacity);
+}
+
+static void
+memx_heap_large_shrink_locked(memx_heap_t *heap) {
+    if (heap->large_count == 0U) {
+        free(heap->large_buckets);
+        heap->large_buckets = NULL;
+        heap->large_bucket_count = 0U;
+    } else if (heap->large_bucket_count > MEMX_HEAP_LARGE_MIN_BUCKETS
+        && heap->large_count <= heap->large_bucket_count / 4U) {
+        /* Failure to shrink preserves the old table and cannot fail free. */
+        (void)memx_heap_large_rehash_locked(heap, heap->large_bucket_count / 2U);
+    }
+}
+
 static void *
 memx_heap_allocate_large(
     memx_heap_t *heap,
@@ -490,14 +559,23 @@ memx_heap_allocate_large(
     large->requested_size = size;
     large->alignment = alignment;
     (void)pthread_mutex_lock(&heap->lock);
-    large->next = heap->large_allocations;
-    heap->large_allocations = large;
+    if (!memx_heap_large_reserve_locked(heap)) {
+        (void)pthread_mutex_unlock(&heap->lock);
+        memx_os_release(large->mapping);
+        free(large);
+        return NULL;
+    }
+    {
+        const size_t bucket = memx_heap_large_bucket(
+            large->pointer, heap->large_bucket_count);
+        large->next = heap->large_buckets[bucket];
+        heap->large_buckets[bucket] = large;
+        heap->large_count += 1U;
+    }
     (void)pthread_mutex_unlock(&heap->lock);
     if (heap->config.collect_activity_statistics) {
         (void)atomic_fetch_add_explicit(
             &heap->large_allocation_count, 1U, memory_order_relaxed);
-        (void)atomic_fetch_add_explicit(
-            &heap->active_large_allocations, 1U, memory_order_relaxed);
     }
     memx_heap_add_live(heap, size);
     return large->pointer;
@@ -550,19 +628,22 @@ static memx_heap_large_t *
 memx_heap_find_large_locked(
     memx_heap_t *heap,
     const void *pointer,
-    memx_heap_large_t **out_previous) {
-    memx_heap_large_t *previous = NULL;
-    memx_heap_large_t *large;
-    for (large = heap->large_allocations;
-         large != NULL;
-         large = large->next) {
+    memx_heap_large_t ***out_link) {
+    memx_heap_large_t **link;
+    if (heap->large_bucket_count == 0U) {
+        return NULL;
+    }
+    link = &heap->large_buckets[memx_heap_large_bucket(
+        pointer, heap->large_bucket_count)];
+    while (*link != NULL) {
+        memx_heap_large_t *large = *link;
         if (large->pointer == pointer) {
-            if (out_previous != NULL) {
-                *out_previous = previous;
+            if (out_link != NULL) {
+                *out_link = link;
             }
             return large;
         }
-        previous = large;
+        link = &large->next;
     }
     return NULL;
 }
@@ -738,7 +819,6 @@ memx_heap_create(
     atomic_init(&heap->frees, 0U);
     atomic_init(&heap->remote_frees, 0U);
     atomic_init(&heap->invalid_frees, 0U);
-    atomic_init(&heap->active_large_allocations, 0U);
     atomic_init(&heap->thread_cache_count, 0U);
     *out_heap = heap;
     return MEMX_HEAP_OK;
@@ -803,20 +883,23 @@ memx_heap_thread_detach(memx_heap_t *heap) {
 
 void
 memx_heap_destroy(memx_heap_t *heap) {
-    memx_heap_large_t *large;
+    size_t bucket;
     memx_heap_span_t *span;
     memx_heap_cache_t *cache;
     if (heap == NULL) {
         return;
     }
     memx_heap_thread_detach(heap);
-    large = heap->large_allocations;
-    while (large != NULL) {
-        memx_heap_large_t *next = large->next;
-        memx_os_release(large->mapping);
-        free(large);
-        large = next;
+    for (bucket = 0U; bucket < heap->large_bucket_count; ++bucket) {
+        memx_heap_large_t *large = heap->large_buckets[bucket];
+        while (large != NULL) {
+            memx_heap_large_t *next = large->next;
+            memx_os_release(large->mapping);
+            free(large);
+            large = next;
+        }
     }
+    free(heap->large_buckets);
     cache = heap->caches;
     while (cache != NULL) {
         memx_heap_cache_t *next = cache->heap_next;
@@ -994,7 +1077,7 @@ memx_heap_free(memx_heap_t *heap, void *pointer) {
     memx_heap_span_t *span = NULL;
     memx_heap_block_t *block;
     memx_heap_large_t *large;
-    memx_heap_large_t *previous = NULL;
+    memx_heap_large_t **link = NULL;
 
     if (pointer == NULL) {
         return true;
@@ -1005,7 +1088,7 @@ memx_heap_free(memx_heap_t *heap, void *pointer) {
     (void)pthread_mutex_lock(&heap->lock);
     block = memx_heap_small_block_locked(heap, pointer, &span);
     if (block == NULL) {
-        large = memx_heap_find_large_locked(heap, pointer, &previous);
+        large = memx_heap_find_large_locked(heap, pointer, &link);
         if (large == NULL) {
             (void)pthread_mutex_unlock(&heap->lock);
             if (heap->config.collect_activity_statistics) {
@@ -1014,19 +1097,16 @@ memx_heap_free(memx_heap_t *heap, void *pointer) {
             }
             return false;
         }
-        if (previous == NULL) {
-            heap->large_allocations = large->next;
-        } else {
-            previous->next = large->next;
-        }
+        assert(link != NULL);
+        *link = large->next;
+        heap->large_count -= 1U;
+        memx_heap_large_shrink_locked(heap);
         (void)pthread_mutex_unlock(&heap->lock);
         if (heap->config.collect_activity_statistics) {
             (void)atomic_fetch_sub_explicit(
                 &heap->live_requested_bytes,
                 large->requested_size,
                 memory_order_relaxed);
-            (void)atomic_fetch_sub_explicit(
-                &heap->active_large_allocations, 1U, memory_order_relaxed);
             (void)atomic_fetch_add_explicit(
                 &heap->frees, 1U, memory_order_relaxed);
         }
@@ -1154,6 +1234,9 @@ memx_heap_get_stats(memx_heap_t *heap, memx_heap_stats_t *out_stats) {
     out_stats->peak_live_requested_bytes = atomic_load_explicit(
         &heap->peak_live_requested_bytes, memory_order_relaxed);
     (void)pthread_mutex_lock(&heap->lock);
+    out_stats->active_large_allocations = heap->large_count;
+    out_stats->large_index_bytes = heap->large_bucket_count
+        * sizeof(*heap->large_buckets);
     for (cache = heap->caches; cache != NULL; cache = cache->heap_next) {
         out_stats->small_allocations += cache->allocation_count;
         out_stats->cache_hits += cache->cache_hits;
@@ -1167,8 +1250,6 @@ memx_heap_get_stats(memx_heap_t *heap, memx_heap_stats_t *out_stats) {
         &heap->remote_frees, memory_order_relaxed);
     out_stats->invalid_frees = atomic_load_explicit(
         &heap->invalid_frees, memory_order_relaxed);
-    out_stats->active_large_allocations = atomic_load_explicit(
-        &heap->active_large_allocations, memory_order_relaxed);
     out_stats->thread_caches = atomic_load_explicit(
         &heap->thread_cache_count, memory_order_relaxed);
 }

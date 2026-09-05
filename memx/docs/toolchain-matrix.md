@@ -111,14 +111,14 @@ native OS image, Bottles/Wine where applicable, or real hardware.
 Compiler Explorer is installed at:
 
 ```text
-/home/raze/projects/lowlowlow/research/compiler-explorer
+/home/raze/projects/lowlowlow/memx/research/compiler-explorer
 ```
 
 It is configured with all 22 compiler entries in
 `etc/config/c.local.properties`. Start the C-only instance with:
 
 ```sh
-cd /home/raze/projects/lowlowlow/research/compiler-explorer
+cd /home/raze/projects/lowlowlow/memx/research/compiler-explorer
 make run-only EXTRA_ARGS='--language c'
 ```
 

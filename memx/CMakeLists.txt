@@ -165,6 +165,16 @@ if(MEMX_BUILD_TESTS)
         target_compile_features(memx_heap_test PRIVATE c_std_17)
         memx_target_warnings(memx_heap_test)
         add_test(NAME memx_heap_test COMMAND memx_heap_test)
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
+            AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang"
+            AND NOT BUILD_SHARED_LIBS)
+            add_executable(memx_large_fault_test tests/test_large_faults.c)
+            target_link_libraries(memx_large_fault_test PRIVATE memx_heap Threads::Threads)
+            target_link_options(memx_large_fault_test PRIVATE -Wl,--wrap=calloc)
+            target_compile_features(memx_large_fault_test PRIVATE c_std_17)
+            memx_target_warnings(memx_large_fault_test)
+            add_test(NAME memx_large_fault_test COMMAND memx_large_fault_test)
+        endif()
     endif()
 
     find_package(Python3 COMPONENTS Interpreter QUIET)
@@ -204,6 +214,11 @@ if(MEMX_BUILD_BENCHMARKS)
     memx_target_warnings(memx_allocator_workload)
 
     if(TARGET memx_heap)
+        add_executable(memx_large_heap_bench bench/large_heap_bench.c)
+        target_link_libraries(memx_large_heap_bench PRIVATE memx_heap Threads::Threads)
+        target_compile_features(memx_large_heap_bench PRIVATE c_std_17)
+        memx_target_warnings(memx_large_heap_bench)
+
         add_executable(memx_heap_workload bench/allocator_workload.c)
         target_compile_definitions(memx_heap_workload PRIVATE
             MEMX_WORKLOAD_USE_MEMX_HEAP=1)

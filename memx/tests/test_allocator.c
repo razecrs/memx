@@ -620,6 +620,146 @@ test_randomized_payload_differential(void) {
     memx_heap_destroy(heap);
 }
 
+static void
+test_large_index_churn(void) {
+    enum { COUNT = 257 };
+    void *pointers[COUNT] = {0};
+    size_t sizes[COUNT];
+    memx_heap_t *heap = NULL;
+    memx_heap_stats_t stats;
+    size_t cycle;
+    size_t index;
+    /* Structural accounting must work with hot activity counters disabled. */
+    EXPECT_TRUE(memx_heap_create(NULL, &heap) == MEMX_HEAP_OK);
+    if (heap == NULL) {
+        return;
+    }
+    memx_heap_get_stats(heap, &stats);
+    EXPECT_EQ_SIZE(stats.large_index_bytes, 0U);
+    for (cycle = 0U; cycle < 3U; ++cycle) {
+        for (index = 0U; index < COUNT; ++index) {
+            sizes[index] = index % 2U == 0U ? 9000U + index : 73U;
+            pointers[index] = index % 2U == 0U
+                ? memx_heap_malloc(heap, sizes[index])
+                : memx_heap_aligned_alloc(heap, 4096U, sizes[index]);
+            EXPECT_TRUE(pointers[index] != NULL);
+            if (pointers[index] != NULL) {
+                memset(pointers[index], (int)(unsigned char)index, sizes[index]);
+                EXPECT_EQ_SIZE(memx_heap_usable_size(heap, pointers[index]),
+                    sizes[index]);
+                EXPECT_TRUE(!memx_heap_free(heap,
+                    (unsigned char *)pointers[index] + 1U));
+            }
+        }
+        memx_heap_get_stats(heap, &stats);
+        EXPECT_EQ_SIZE(stats.active_large_allocations, COUNT);
+        EXPECT_EQ_SIZE(stats.large_index_bytes, 512U * sizeof(void *));
+        EXPECT_EQ_SIZE(memx_heap_usable_size(heap, &stats), 0U);
+        EXPECT_TRUE(!memx_heap_free(heap, &stats));
+        EXPECT_EQ_SIZE(memx_heap_usable_size(heap, (void *)UINTPTR_MAX), 0U);
+        for (index = 0U; index < COUNT; ++index) {
+            /* A permutation of the prime-sized population removes arbitrary
+             * chain members while repeated lookups verify all survivors. */
+            const size_t slot = (index * 73U) % COUNT;
+            size_t survivor;
+            if (pointers[slot] != NULL) {
+                unsigned char *bytes = pointers[slot];
+                EXPECT_TRUE(bytes[0] == (unsigned char)slot);
+                EXPECT_TRUE(bytes[sizes[slot] - 1U] == (unsigned char)slot);
+                EXPECT_TRUE(memx_heap_realloc(heap, pointers[slot], 32U)
+                    == pointers[slot]);
+                EXPECT_EQ_SIZE(memx_heap_usable_size(heap, pointers[slot]), 32U);
+                EXPECT_TRUE(memx_heap_free(heap, pointers[slot]));
+                EXPECT_TRUE(!memx_heap_free(heap, pointers[slot]));
+                pointers[slot] = NULL;
+            }
+            for (survivor = 0U; survivor < COUNT; ++survivor) {
+                if (pointers[survivor] != NULL) {
+                    EXPECT_EQ_SIZE(memx_heap_usable_size(heap, pointers[survivor]),
+                        sizes[survivor]);
+                }
+            }
+            memx_heap_get_stats(heap, &stats);
+            EXPECT_EQ_SIZE(stats.active_large_allocations, COUNT - index - 1U);
+            if (index == COUNT - 2U) {
+                EXPECT_EQ_SIZE(stats.large_index_bytes, 64U * sizeof(void *));
+            }
+        }
+        memx_heap_get_stats(heap, &stats);
+        EXPECT_EQ_SIZE(stats.large_index_bytes, 0U);
+    }
+    /* Destroy with multiple populated chains and no explicit free. */
+    for (index = 0U; index < COUNT; ++index) {
+        EXPECT_TRUE(memx_heap_malloc(heap, 10000U + index) != NULL);
+    }
+    memx_heap_destroy(heap);
+}
+
+typedef struct large_thread_test {
+    memx_heap_t *heap;
+    bool ok;
+} large_thread_test_t;
+
+static void *
+large_churn_thread(void *argument) {
+    large_thread_test_t *test = argument;
+    void *pointers[129] = {0};
+    size_t cycle;
+    size_t index;
+    test->ok = true;
+    for (cycle = 0U; cycle < 8U; ++cycle) {
+        for (index = 0U; index < 129U; ++index) {
+            pointers[index] = memx_heap_malloc(test->heap, 8193U + index);
+            if (pointers[index] == NULL) {
+                test->ok = false;
+            }
+        }
+        for (index = 0U; index < 129U; ++index) {
+            if (pointers[index] != NULL) {
+                if (memx_heap_usable_size(test->heap, pointers[index])
+                    != 8193U + index
+                    || !memx_heap_free(test->heap, pointers[index])) {
+                    test->ok = false;
+                }
+                pointers[index] = NULL;
+            }
+        }
+    }
+    memx_heap_thread_detach(test->heap);
+    return NULL;
+}
+
+static void
+test_large_index_concurrency(void) {
+    pthread_t threads[4];
+    bool created[4] = {false};
+    large_thread_test_t work[4];
+    memx_heap_t *heap = create_heap();
+    memx_heap_stats_t stats;
+    size_t index;
+    if (heap == NULL) {
+        return;
+    }
+    for (index = 0U; index < 4U; ++index) {
+        work[index].heap = heap;
+        work[index].ok = false;
+        created[index] = pthread_create(&threads[index], NULL,
+            large_churn_thread, &work[index]) == 0;
+        EXPECT_TRUE(created[index]);
+    }
+    for (index = 0U; index < 4U; ++index) {
+        if (created[index]) {
+            EXPECT_TRUE(pthread_join(threads[index], NULL) == 0);
+            EXPECT_TRUE(work[index].ok);
+        }
+    }
+    memx_heap_get_stats(heap, &stats);
+    EXPECT_EQ_SIZE(stats.active_large_allocations, 0U);
+    EXPECT_EQ_SIZE(stats.large_index_bytes, 0U);
+    EXPECT_EQ_SIZE(stats.live_requested_bytes, 0U);
+    memx_heap_destroy(heap);
+}
+
 int
 main(void) {
     test_configuration();
@@ -635,6 +775,8 @@ main(void) {
     test_arena_exhaustion();
     test_chunked_central_refill();
     test_randomized_payload_differential();
+    test_large_index_churn();
+    test_large_index_concurrency();
     if (failures != 0) {
         fprintf(stderr, "%d allocator test(s) failed\n", failures);
         return EXIT_FAILURE;

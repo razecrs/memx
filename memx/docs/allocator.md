@@ -62,7 +62,7 @@ reserved arena: 256 MiB
 span:            64 KiB
 MemX region:     64 KiB
 MemX granule:     4 KiB
-cache refill:      128 blocks
+cache refill:      256 blocks
 cache ceiling:     256 blocks / class / thread
 activity counters: disabled by default
 ```
@@ -82,10 +82,26 @@ bookkeeping to hot operations. Arena, span, and cache structure accounting
 remains available independently.
 
 Pointers larger than 8192 bytes or requiring over-alignment use a separate
-anonymous mapping recorded in a heap-owned list. That makes the large path
-simple and correct, not yet asymptotically optimal: lookup/free of a large
-allocation is linear in the number of live large mappings. Small spans are not
-yet decommitted or recycled within the arena.
+anonymous mapping recorded in a heap-owned hash index. Checked size/free/realloc
+hash the base address without dereferencing it, then compare full pointers in
+one collision chain. Expected lookup cost is constant for well-distributed
+addresses; pathological collisions still have linear worst-case cost. The hash
+is not keyed or a defense against deliberate collision attacks.
+
+The bucket array is allocated lazily with 64 entries, doubles when live records
+reach bucket capacity, and attempts to halve when occupancy falls to one quarter.
+The last removal releases the array. Rehashing and chain publication use the
+existing heap mutex; readers never observe partial chains. Growth failure
+releases the unpublished mapping and leaves existing allocations intact. Shrink
+failure leaves a valid larger table and does not fail free. Mutation can include
+an O(n) rehash and temporarily holds both bucket arrays.
+
+`large_index_bytes` reports current requested bucket bytes, excluding allocator
+overhead, large records, mappings, and transient rehash space.
+`active_large_allocations` is structural accounting and remains available even
+when activity statistics are disabled. The added stats field changes the public
+struct size; rebuild callers together with this experimental library.
+Small spans are not yet decommitted or recycled within the arena.
 
 ## API
 
@@ -130,3 +146,11 @@ libFuzzer, ASan, and UBSan. The test suite also runs under ThreadSanitizer.
 `malloc` and `memx_heap`. It is an engineering smoke benchmark only. It does
 not compare fragmentation, RSS, tail latency, application throughput, or the
 full feature set of mimalloc/jemalloc.
+
+`memx_large_heap_bench LIVE_COUNT QUERIES` measures checked large-object index
+scaling separately. The [2026-09-05 before/after report](../bench/results/large-index-2026-09-05.json)
+contains raw samples, build fingerprints, successful/missing size lookups,
+in-place shrink, mapping allocation and shuffled frees, plus a separate
+small-object mimalloc comparison. The matching [math note](allocator-math-2026-09-05.md)
+derives the hash-table costs and identifies future size-class and contention
+experiments.

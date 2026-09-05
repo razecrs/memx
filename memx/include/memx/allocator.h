@@ -52,6 +52,10 @@ typedef struct memx_heap_stats {
     size_t invalid_frees;
     size_t active_large_allocations;
     size_t thread_caches;
+    /* Requested bucket-array bytes, excluding large records and OS mappings.
+     * This and active_large_allocations are available with activity counters
+     * disabled. Zero after the last large allocation is freed. */
+    size_t large_index_bytes;
 } memx_heap_stats_t;
 
 memx_heap_config_t memx_heap_config_default(void);

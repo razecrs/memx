@@ -1,0 +1,2216 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-09-05T10:20:10+02:00",
+  "scope": "Native single-host MemX before/after large-index microbenchmark, plus a separate mixed small-object comparator. Not a production allocator superiority claim.",
+  "environment": {
+    "cpu": "Intel Core i7-9750H",
+    "architecture": "x86_64",
+    "kernel": "Linux 7.1.10-200.fc44.x86_64",
+    "compiler": "GNU 16.2.1 /usr/bin/cc",
+    "build_type": "Release",
+    "release_flags": "-O3 -DNDEBUG",
+    "strict_warnings": true,
+    "pinned_logical_cpu": 2,
+    "scaling_governor": "powersave",
+    "turbo_and_thermal_controls": "not controlled",
+    "execution": "Native outside sandbox; no QEMU; timing phases sequential, no concurrent compilation or tests launched by this agent."
+  },
+  "provenance": {
+    "baseline_commit": "3caa77c67d3d3a87858f3bd82ba48c007ed7285a",
+    "baseline_heap_source_path_at_commit": "src/allocator/heap.c",
+    "baseline_heap_sha256": "fe02370dc47ca9a7743c46cc50bb858d4083ed949f4fd64cd715d00bc05856bb",
+    "candidate_heap_source_path": "memx/src/allocator/heap.c",
+    "candidate_heap_sha256": "015644f4f3d61cefb15f1bfc9d52800be00121166b021eba5d77e9403e74a047",
+    "candidate_revision": "Working changes relative to baseline; identify tested heap by SHA256, not the baseline revision.",
+    "large_harness_sha256": "17de2058b7eb19e449add8fc3370c3ea39a93d470adf4ce1461aa95107b97f93",
+    "identical_large_harness_object_sha256": "a28a29bf5f707c3006242d2993cbf84b36bb5a7d3a836e2f1ca27d8ec05507e7",
+    "binaries": {
+      "before_large": {
+        "path": "memx/build-improve-before/memx_large_heap_bench",
+        "sha256": "910259804276d7e1c4e061123e4fcc8be242171343cbbaa43257d9f7a80d4130"
+      },
+      "after_large": {
+        "path": "memx/build-current/memx_large_heap_bench",
+        "sha256": "867c4a109a62d02be1481c99ec457159754981a5faa0b984e3c8cc709fdf43ab"
+      },
+      "before_small": {
+        "path": "memx/build-improve-before/memx_heap_workload",
+        "sha256": "7c2fce05d49199530752843925ebef4b9e05354a8da3efcc1dff7c80f873baab"
+      },
+      "after_small": {
+        "path": "memx/build-current/memx_heap_workload",
+        "sha256": "8f962673edd06d28bb7b8b8d0347af251bc32ba5ddb93448481a959c5f382ccf"
+      },
+      "checked_small": {
+        "path": "memx/build-current/memx_heap_workload_checked",
+        "sha256": "76dc5612d4a155051820974dba5cbc7d73931388e412ee30cce7182b5b747165"
+      },
+      "system_small": {
+        "path": "memx/build-current/memx_allocator_workload",
+        "sha256": "4332fffed56f0ba669679cae1cc0d472c67c7be0a44b7a95344bea6a856649a3"
+      }
+    }
+  },
+  "large_index": {
+    "methodology": {
+      "populations": [
+        1,
+        64,
+        1024,
+        8192
+      ],
+      "queries_per_phase": 100000,
+      "allocation_payload_bytes": 16384,
+      "shrunk_payload_bytes": 12288,
+      "untimed_shuffle": "Fixed-seed permutation reused cyclically within each query phase; identical for baseline and candidate.",
+      "repetitions": 7,
+      "warmups": 1,
+      "warmup_semantics": "Separate process repetition 0 excluded; does not warm allocator state in later fresh processes.",
+      "run_order": "For each population: repetition 0..7; before/after on even repetitions, after/before on odd.",
+      "api": "Checked memx_heap_usable_size, realloc and free",
+      "checks": "Exit zero, 1638400000 checksum, interior misses zero, shrink preserves pointer and two touched payload bytes, post-shrink sizes, all frees succeed.",
+      "commands": [
+        "taskset -c 2 memx/build-improve-before/memx_large_heap_bench N 100000",
+        "taskset -c 2 memx/build-current/memx_large_heap_bench N 100000"
+      ],
+      "units": "All timings in ns/op. MAD is median absolute deviation across process-level phase averages, not operation-level tail latency."
+    },
+    "memory": {
+      "category": "Calculated requested bucket-array bytes, not RSS; no bucket array in baseline",
+      "heap_struct_bytes_before_x86_64": 384,
+      "heap_struct_bytes_after_x86_64": 392,
+      "heap_struct_delta_bytes_x86_64": 8,
+      "heap_struct_measurement": "Clang 22 record-layout dump with current x86-64 glibc headers; one old atomic counter was removed while adding two table counters.",
+      "large_record_size_change_bytes": 0,
+      "peak_population_bucket_bytes": 65536,
+      "minimum_nonempty_bucket_bytes": 512,
+      "after_final_free_bucket_bytes": 0,
+      "peak_growth_bucket_formula": "old B plus new 2B pointers = 3B*sizeof(pointer), excluding records, allocator overhead, and mappings",
+      "tests": "Structural accounting tested for growth, shrink, allocation failure, zero activity statistics, and empty-table recreation."
+    },
+    "object_footprint": {
+      "tool": "GNU size (text column includes read-only data)",
+      "baseline_heap_object_text_column": 8887,
+      "candidate_heap_object_text_column": 10223,
+      "delta_bytes": 1336
+    },
+    "summary": [
+      {
+        "live_allocations": 1,
+        "before": {
+          "allocate_ns_per_op": {
+            "median": 8334,
+            "mad": 2547,
+            "min": 5666,
+            "max": 11797
+          },
+          "hit_ns_per_op": {
+            "median": 20.304,
+            "mad": 2.2959999999999994,
+            "min": 18.008,
+            "max": 31.796
+          },
+          "miss_ns_per_op": {
+            "median": 20.334,
+            "mad": 1.9149999999999991,
+            "min": 17.553,
+            "max": 24.015
+          },
+          "resize_ns_per_op": {
+            "median": 162,
+            "mad": 4,
+            "min": 92,
+            "max": 181
+          },
+          "free_ns_per_op": {
+            "median": 11845,
+            "mad": 3443,
+            "min": 4457,
+            "max": 28000
+          }
+        },
+        "after": {
+          "allocate_ns_per_op": {
+            "median": 6178,
+            "mad": 238,
+            "min": 5817,
+            "max": 9048
+          },
+          "hit_ns_per_op": {
+            "median": 18.979,
+            "mad": 0.5399999999999991,
+            "min": 17.987,
+            "max": 20.899
+          },
+          "miss_ns_per_op": {
+            "median": 18.425,
+            "mad": 0.9699999999999989,
+            "min": 17.089,
+            "max": 22.809
+          },
+          "resize_ns_per_op": {
+            "median": 275,
+            "mad": 57,
+            "min": 148,
+            "max": 538
+          },
+          "free_ns_per_op": {
+            "median": 5640,
+            "mad": 678,
+            "min": 4962,
+            "max": 9016
+          }
+        },
+        "ratios": {
+          "allocate_ns_per_op": {
+            "before_over_after": 1.3489802525089025,
+            "after_latency_change_percent": -25.869930405567555
+          },
+          "hit_ns_per_op": {
+            "before_over_after": 1.0698140049528426,
+            "after_latency_change_percent": -6.5258077226162285
+          },
+          "miss_ns_per_op": {
+            "before_over_after": 1.1036092265943012,
+            "after_latency_change_percent": -9.388216779777704
+          },
+          "resize_ns_per_op": {
+            "before_over_after": 0.5890909090909091,
+            "after_latency_change_percent": 69.75308641975309
+          },
+          "free_ns_per_op": {
+            "before_over_after": 2.100177304964539,
+            "after_latency_change_percent": -52.384972562262554
+          }
+        }
+      },
+      {
+        "live_allocations": 64,
+        "before": {
+          "allocate_ns_per_op": {
+            "median": 5401.297,
+            "mad": 849.2659999999996,
+            "min": 4213.453,
+            "max": 6612.359
+          },
+          "hit_ns_per_op": {
+            "median": 59.004,
+            "mad": 5.303999999999995,
+            "min": 49.789,
+            "max": 73.513
+          },
+          "miss_ns_per_op": {
+            "median": 81.137,
+            "mad": 3.405000000000001,
+            "min": 72.352,
+            "max": 90.053
+          },
+          "resize_ns_per_op": {
+            "median": 58.328,
+            "mad": 0.5940000000000012,
+            "min": 57.297,
+            "max": 59.359
+          },
+          "free_ns_per_op": {
+            "median": 5010.984,
+            "mad": 864.0930000000008,
+            "min": 4023.531,
+            "max": 6872.703
+          }
+        },
+        "after": {
+          "allocate_ns_per_op": {
+            "median": 4655,
+            "mad": 390.2340000000004,
+            "min": 4240.469,
+            "max": 5715.172
+          },
+          "hit_ns_per_op": {
+            "median": 20.824,
+            "mad": 0.5059999999999967,
+            "min": 19.865,
+            "max": 31.786
+          },
+          "miss_ns_per_op": {
+            "median": 20.026,
+            "mad": 1.1469999999999985,
+            "min": 18.021,
+            "max": 26.085
+          },
+          "resize_ns_per_op": {
+            "median": 26.188,
+            "mad": 3.75,
+            "min": 22.438,
+            "max": 72.562
+          },
+          "free_ns_per_op": {
+            "median": 4532.391,
+            "mad": 488.7659999999996,
+            "min": 3743.031,
+            "max": 7845.469
+          }
+        },
+        "ratios": {
+          "allocate_ns_per_op": {
+            "before_over_after": 1.1603215896885068,
+            "after_latency_change_percent": -13.816996177029328
+          },
+          "hit_ns_per_op": {
+            "before_over_after": 2.8334613907030346,
+            "after_latency_change_percent": -64.7074774591553
+          },
+          "miss_ns_per_op": {
+            "before_over_after": 4.051582942175172,
+            "after_latency_change_percent": -75.3182888201437
+          },
+          "resize_ns_per_op": {
+            "before_over_after": 2.2272796700778983,
+            "after_latency_change_percent": -55.102180770813334
+          },
+          "free_ns_per_op": {
+            "before_over_after": 1.1055939348569002,
+            "after_latency_change_percent": -9.550878629826009
+          }
+        }
+      },
+      {
+        "live_allocations": 1024,
+        "before": {
+          "allocate_ns_per_op": {
+            "median": 4848.134,
+            "mad": 334.40499999999975,
+            "min": 4216.512,
+            "max": 5847.557
+          },
+          "hit_ns_per_op": {
+            "median": 1411.179,
+            "mad": 21.29399999999987,
+            "min": 1365.438,
+            "max": 1476.299
+          },
+          "miss_ns_per_op": {
+            "median": 3315.145,
+            "mad": 22.98199999999997,
+            "min": 3292.163,
+            "max": 3368.744
+          },
+          "resize_ns_per_op": {
+            "median": 1384.212,
+            "mad": 77.40499999999997,
+            "min": 1303.349,
+            "max": 1533.935
+          },
+          "free_ns_per_op": {
+            "median": 5261.146,
+            "mad": 188.64500000000044,
+            "min": 4998.491,
+            "max": 5655.802
+          }
+        },
+        "after": {
+          "allocate_ns_per_op": {
+            "median": 5074.525,
+            "mad": 239.90999999999985,
+            "min": 4658.917,
+            "max": 6743.229
+          },
+          "hit_ns_per_op": {
+            "median": 28.191,
+            "mad": 2.442999999999998,
+            "min": 23.729,
+            "max": 40.745
+          },
+          "miss_ns_per_op": {
+            "median": 36.52,
+            "mad": 10.066000000000003,
+            "min": 24.927,
+            "max": 47.674
+          },
+          "resize_ns_per_op": {
+            "median": 33.009,
+            "mad": 12.2,
+            "min": 20.247,
+            "max": 48.9
+          },
+          "free_ns_per_op": {
+            "median": 4626.035,
+            "mad": 168.34400000000005,
+            "min": 4173.795,
+            "max": 5681.687
+          }
+        },
+        "ratios": {
+          "allocate_ns_per_op": {
+            "before_over_after": 0.9553867603371745,
+            "after_latency_change_percent": 4.669652282713299
+          },
+          "hit_ns_per_op": {
+            "before_over_after": 50.05778439927637,
+            "after_latency_change_percent": -98.00230870782516
+          },
+          "miss_ns_per_op": {
+            "before_over_after": 90.7761500547645,
+            "after_latency_change_percent": -98.89838905990538
+          },
+          "resize_ns_per_op": {
+            "before_over_after": 41.93438153230937,
+            "after_latency_change_percent": -97.61532193045574
+          },
+          "free_ns_per_op": {
+            "before_over_after": 1.1372905738931935,
+            "after_latency_change_percent": -12.071723537039269
+          }
+        }
+      },
+      {
+        "live_allocations": 8192,
+        "before": {
+          "allocate_ns_per_op": {
+            "median": 4767.467,
+            "mad": 166.4410000000007,
+            "min": 4390.83,
+            "max": 4984.042
+          },
+          "hit_ns_per_op": {
+            "median": 16385.616,
+            "mad": 145.06600000000253,
+            "min": 16187.344,
+            "max": 16570.192
+          },
+          "miss_ns_per_op": {
+            "median": 35042.999,
+            "mad": 113.81100000000151,
+            "min": 34848.325,
+            "max": 35378.941
+          },
+          "resize_ns_per_op": {
+            "median": 16354.115,
+            "mad": 84.48199999999997,
+            "min": 16208.204,
+            "max": 19169.665
+          },
+          "free_ns_per_op": {
+            "median": 15285.362,
+            "mad": 28.6929999999993,
+            "min": 14436.08,
+            "max": 17680.434
+          }
+        },
+        "after": {
+          "allocate_ns_per_op": {
+            "median": 4679.143,
+            "mad": 214.09199999999964,
+            "min": 4401.094,
+            "max": 4927.506
+          },
+          "hit_ns_per_op": {
+            "median": 37.136,
+            "mad": 2.5649999999999977,
+            "min": 34.281,
+            "max": 41.269
+          },
+          "miss_ns_per_op": {
+            "median": 41.634,
+            "mad": 5.296999999999997,
+            "min": 34.752,
+            "max": 50.447
+          },
+          "resize_ns_per_op": {
+            "median": 28.14,
+            "mad": 2.279,
+            "min": 25.116,
+            "max": 48.973
+          },
+          "free_ns_per_op": {
+            "median": 4545.153,
+            "mad": 128.1189999999997,
+            "min": 4260.728,
+            "max": 5030.391
+          }
+        },
+        "ratios": {
+          "allocate_ns_per_op": {
+            "before_over_after": 1.018876106158756,
+            "after_latency_change_percent": -1.8526399868106003
+          },
+          "hit_ns_per_op": {
+            "before_over_after": 441.23265833692375,
+            "after_latency_change_percent": -99.77336219767386
+          },
+          "miss_ns_per_op": {
+            "before_over_after": 841.6918624201375,
+            "after_latency_change_percent": -99.88119167540427
+          },
+          "resize_ns_per_op": {
+            "before_over_after": 581.1696872778962,
+            "after_latency_change_percent": -99.82793321436225
+          },
+          "free_ns_per_op": {
+            "before_over_after": 3.3630027416018775,
+            "after_latency_change_percent": -70.2646689034908
+          }
+        }
+      }
+    ],
+    "raw_samples": [
+      {
+        "variant": "before",
+        "repetition": 0,
+        "live_allocations": 1,
+        "queries": 100000,
+        "allocate_ns_per_op": 6427,
+        "hit_ns_per_op": 26.525,
+        "miss_ns_per_op": 23.762,
+        "resize_ns_per_op": 161,
+        "free_ns_per_op": 11306,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 0,
+        "live_allocations": 1,
+        "queries": 100000,
+        "allocate_ns_per_op": 6469,
+        "hit_ns_per_op": 19.978,
+        "miss_ns_per_op": 18.882,
+        "resize_ns_per_op": 215,
+        "free_ns_per_op": 5572,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 1,
+        "live_allocations": 1,
+        "queries": 100000,
+        "allocate_ns_per_op": 6045,
+        "hit_ns_per_op": 18.439,
+        "miss_ns_per_op": 22.809,
+        "resize_ns_per_op": 302,
+        "free_ns_per_op": 7705,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 1,
+        "live_allocations": 1,
+        "queries": 100000,
+        "allocate_ns_per_op": 11797,
+        "hit_ns_per_op": 29.746,
+        "miss_ns_per_op": 20.334,
+        "resize_ns_per_op": 169,
+        "free_ns_per_op": 12724,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 2,
+        "live_allocations": 1,
+        "queries": 100000,
+        "allocate_ns_per_op": 8334,
+        "hit_ns_per_op": 20.304,
+        "miss_ns_per_op": 24.015,
+        "resize_ns_per_op": 181,
+        "free_ns_per_op": 28000,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 2,
+        "live_allocations": 1,
+        "queries": 100000,
+        "allocate_ns_per_op": 6263,
+        "hit_ns_per_op": 20.802,
+        "miss_ns_per_op": 18.425,
+        "resize_ns_per_op": 260,
+        "free_ns_per_op": 9016,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 3,
+        "live_allocations": 1,
+        "queries": 100000,
+        "allocate_ns_per_op": 5940,
+        "hit_ns_per_op": 20.899,
+        "miss_ns_per_op": 20.159,
+        "resize_ns_per_op": 148,
+        "free_ns_per_op": 5296,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 3,
+        "live_allocations": 1,
+        "queries": 100000,
+        "allocate_ns_per_op": 11250,
+        "hit_ns_per_op": 31.796,
+        "miss_ns_per_op": 22.363,
+        "resize_ns_per_op": 161,
+        "free_ns_per_op": 11845,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 4,
+        "live_allocations": 1,
+        "queries": 100000,
+        "allocate_ns_per_op": 5840,
+        "hit_ns_per_op": 18.008,
+        "miss_ns_per_op": 17.553,
+        "resize_ns_per_op": 92,
+        "free_ns_per_op": 4457,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 4,
+        "live_allocations": 1,
+        "queries": 100000,
+        "allocate_ns_per_op": 6178,
+        "hit_ns_per_op": 17.987,
+        "miss_ns_per_op": 17.089,
+        "resize_ns_per_op": 538,
+        "free_ns_per_op": 4962,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 5,
+        "live_allocations": 1,
+        "queries": 100000,
+        "allocate_ns_per_op": 6494,
+        "hit_ns_per_op": 18.743,
+        "miss_ns_per_op": 17.874,
+        "resize_ns_per_op": 218,
+        "free_ns_per_op": 5640,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 5,
+        "live_allocations": 1,
+        "queries": 100000,
+        "allocate_ns_per_op": 5666,
+        "hit_ns_per_op": 23.732,
+        "miss_ns_per_op": 18.419,
+        "resize_ns_per_op": 163,
+        "free_ns_per_op": 12858,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 6,
+        "live_allocations": 1,
+        "queries": 100000,
+        "allocate_ns_per_op": 5787,
+        "hit_ns_per_op": 18.524,
+        "miss_ns_per_op": 19.258,
+        "resize_ns_per_op": 158,
+        "free_ns_per_op": 8402,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 6,
+        "live_allocations": 1,
+        "queries": 100000,
+        "allocate_ns_per_op": 9048,
+        "hit_ns_per_op": 18.979,
+        "miss_ns_per_op": 18.359,
+        "resize_ns_per_op": 411,
+        "free_ns_per_op": 5275,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 7,
+        "live_allocations": 1,
+        "queries": 100000,
+        "allocate_ns_per_op": 5817,
+        "hit_ns_per_op": 18.987,
+        "miss_ns_per_op": 19.395,
+        "resize_ns_per_op": 275,
+        "free_ns_per_op": 7284,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 7,
+        "live_allocations": 1,
+        "queries": 100000,
+        "allocate_ns_per_op": 8701,
+        "hit_ns_per_op": 19.566,
+        "miss_ns_per_op": 22.241,
+        "resize_ns_per_op": 162,
+        "free_ns_per_op": 7705,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 0,
+        "live_allocations": 64,
+        "queries": 100000,
+        "allocate_ns_per_op": 5089.766,
+        "hit_ns_per_op": 48.817,
+        "miss_ns_per_op": 79.739,
+        "resize_ns_per_op": 57.969,
+        "free_ns_per_op": 4134.453,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 0,
+        "live_allocations": 64,
+        "queries": 100000,
+        "allocate_ns_per_op": 4953.641,
+        "hit_ns_per_op": 22.575,
+        "miss_ns_per_op": 27.523,
+        "resize_ns_per_op": 31.062,
+        "free_ns_per_op": 5332.188,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 1,
+        "live_allocations": 64,
+        "queries": 100000,
+        "allocate_ns_per_op": 4264.766,
+        "hit_ns_per_op": 20.824,
+        "miss_ns_per_op": 18.021,
+        "resize_ns_per_op": 23.859,
+        "free_ns_per_op": 4043.625,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 1,
+        "live_allocations": 64,
+        "queries": 100000,
+        "allocate_ns_per_op": 4213.453,
+        "hit_ns_per_op": 49.789,
+        "miss_ns_per_op": 84.095,
+        "resize_ns_per_op": 59.359,
+        "free_ns_per_op": 5010.984,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 2,
+        "live_allocations": 64,
+        "queries": 100000,
+        "allocate_ns_per_op": 6612.359,
+        "hit_ns_per_op": 63.249,
+        "miss_ns_per_op": 72.352,
+        "resize_ns_per_op": 59.297,
+        "free_ns_per_op": 6872.703,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 2,
+        "live_allocations": 64,
+        "queries": 100000,
+        "allocate_ns_per_op": 4240.469,
+        "hit_ns_per_op": 19.865,
+        "miss_ns_per_op": 18.9,
+        "resize_ns_per_op": 22.438,
+        "free_ns_per_op": 3743.031,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 3,
+        "live_allocations": 64,
+        "queries": 100000,
+        "allocate_ns_per_op": 5715.172,
+        "hit_ns_per_op": 31.786,
+        "miss_ns_per_op": 26.085,
+        "resize_ns_per_op": 26.188,
+        "free_ns_per_op": 4540.859,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 3,
+        "live_allocations": 64,
+        "queries": 100000,
+        "allocate_ns_per_op": 4552.031,
+        "hit_ns_per_op": 59.004,
+        "miss_ns_per_op": 78.974,
+        "resize_ns_per_op": 57.297,
+        "free_ns_per_op": 4146.891,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 4,
+        "live_allocations": 64,
+        "queries": 100000,
+        "allocate_ns_per_op": 5634.141,
+        "hit_ns_per_op": 73.513,
+        "miss_ns_per_op": 81.137,
+        "resize_ns_per_op": 58.016,
+        "free_ns_per_op": 4923.406,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 4,
+        "live_allocations": 64,
+        "queries": 100000,
+        "allocate_ns_per_op": 4837.969,
+        "hit_ns_per_op": 20.808,
+        "miss_ns_per_op": 19.911,
+        "resize_ns_per_op": 30.141,
+        "free_ns_per_op": 4532.391,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 5,
+        "live_allocations": 64,
+        "queries": 100000,
+        "allocate_ns_per_op": 4848.688,
+        "hit_ns_per_op": 22.104,
+        "miss_ns_per_op": 21.173,
+        "resize_ns_per_op": 22.75,
+        "free_ns_per_op": 4452.25,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 5,
+        "live_allocations": 64,
+        "queries": 100000,
+        "allocate_ns_per_op": 6246.828,
+        "hit_ns_per_op": 68.676,
+        "miss_ns_per_op": 73.994,
+        "resize_ns_per_op": 57.734,
+        "free_ns_per_op": 4023.531,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 6,
+        "live_allocations": 64,
+        "queries": 100000,
+        "allocate_ns_per_op": 4425.875,
+        "hit_ns_per_op": 53.7,
+        "miss_ns_per_op": 84.542,
+        "resize_ns_per_op": 58.328,
+        "free_ns_per_op": 5370.188,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 6,
+        "live_allocations": 64,
+        "queries": 100000,
+        "allocate_ns_per_op": 4262.062,
+        "hit_ns_per_op": 21.33,
+        "miss_ns_per_op": 20.026,
+        "resize_ns_per_op": 72.562,
+        "free_ns_per_op": 7845.469,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 7,
+        "live_allocations": 64,
+        "queries": 100000,
+        "allocate_ns_per_op": 4655,
+        "hit_ns_per_op": 20.467,
+        "miss_ns_per_op": 22.645,
+        "resize_ns_per_op": 39.156,
+        "free_ns_per_op": 6803.922,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 7,
+        "live_allocations": 64,
+        "queries": 100000,
+        "allocate_ns_per_op": 5401.297,
+        "hit_ns_per_op": 54.435,
+        "miss_ns_per_op": 90.053,
+        "resize_ns_per_op": 58.656,
+        "free_ns_per_op": 6719.484,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 0,
+        "live_allocations": 1024,
+        "queries": 100000,
+        "allocate_ns_per_op": 6335.995,
+        "hit_ns_per_op": 1416.477,
+        "miss_ns_per_op": 3359.171,
+        "resize_ns_per_op": 1348.219,
+        "free_ns_per_op": 5630.021,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 0,
+        "live_allocations": 1024,
+        "queries": 100000,
+        "allocate_ns_per_op": 4788.534,
+        "hit_ns_per_op": 24.282,
+        "miss_ns_per_op": 26.118,
+        "resize_ns_per_op": 20.225,
+        "free_ns_per_op": 3970.091,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 1,
+        "live_allocations": 1024,
+        "queries": 100000,
+        "allocate_ns_per_op": 5217.517,
+        "hit_ns_per_op": 28.061,
+        "miss_ns_per_op": 26.442,
+        "resize_ns_per_op": 20.509,
+        "free_ns_per_op": 4246.003,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 1,
+        "live_allocations": 1024,
+        "queries": 100000,
+        "allocate_ns_per_op": 4216.512,
+        "hit_ns_per_op": 1379.318,
+        "miss_ns_per_op": 3309.263,
+        "resize_ns_per_op": 1306.807,
+        "free_ns_per_op": 5535.979,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 2,
+        "live_allocations": 1024,
+        "queries": 100000,
+        "allocate_ns_per_op": 5709.668,
+        "hit_ns_per_op": 1432.473,
+        "miss_ns_per_op": 3341.139,
+        "resize_ns_per_op": 1360.957,
+        "free_ns_per_op": 5119.918,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 2,
+        "live_allocations": 1024,
+        "queries": 100000,
+        "allocate_ns_per_op": 5823.755,
+        "hit_ns_per_op": 23.729,
+        "miss_ns_per_op": 37.05,
+        "resize_ns_per_op": 33.009,
+        "free_ns_per_op": 4794.379,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 3,
+        "live_allocations": 1024,
+        "queries": 100000,
+        "allocate_ns_per_op": 6743.229,
+        "hit_ns_per_op": 28.598,
+        "miss_ns_per_op": 24.927,
+        "resize_ns_per_op": 48.9,
+        "free_ns_per_op": 5681.687,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 3,
+        "live_allocations": 1024,
+        "queries": 100000,
+        "allocate_ns_per_op": 5847.557,
+        "hit_ns_per_op": 1402.269,
+        "miss_ns_per_op": 3315.145,
+        "resize_ns_per_op": 1464.847,
+        "free_ns_per_op": 5449.791,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 4,
+        "live_allocations": 1024,
+        "queries": 100000,
+        "allocate_ns_per_op": 4513.729,
+        "hit_ns_per_op": 1476.299,
+        "miss_ns_per_op": 3340.495,
+        "resize_ns_per_op": 1533.935,
+        "free_ns_per_op": 5261.146,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 4,
+        "live_allocations": 1024,
+        "queries": 100000,
+        "allocate_ns_per_op": 4834.615,
+        "hit_ns_per_op": 28.191,
+        "miss_ns_per_op": 26.454,
+        "resize_ns_per_op": 42.832,
+        "free_ns_per_op": 4173.795,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 5,
+        "live_allocations": 1024,
+        "queries": 100000,
+        "allocate_ns_per_op": 4658.917,
+        "hit_ns_per_op": 25.748,
+        "miss_ns_per_op": 36.52,
+        "resize_ns_per_op": 20.809,
+        "free_ns_per_op": 4476.07,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 5,
+        "live_allocations": 1024,
+        "queries": 100000,
+        "allocate_ns_per_op": 4848.134,
+        "hit_ns_per_op": 1365.438,
+        "miss_ns_per_op": 3293.49,
+        "resize_ns_per_op": 1384.212,
+        "free_ns_per_op": 4998.491,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 6,
+        "live_allocations": 1024,
+        "queries": 100000,
+        "allocate_ns_per_op": 4873.199,
+        "hit_ns_per_op": 1421.817,
+        "miss_ns_per_op": 3368.744,
+        "resize_ns_per_op": 1404.544,
+        "free_ns_per_op": 5202.624,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 6,
+        "live_allocations": 1024,
+        "queries": 100000,
+        "allocate_ns_per_op": 5074.525,
+        "hit_ns_per_op": 40.745,
+        "miss_ns_per_op": 47.674,
+        "resize_ns_per_op": 44.404,
+        "free_ns_per_op": 4651.663,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 7,
+        "live_allocations": 1024,
+        "queries": 100000,
+        "allocate_ns_per_op": 4907.361,
+        "hit_ns_per_op": 34.553,
+        "miss_ns_per_op": 38.816,
+        "resize_ns_per_op": 20.247,
+        "free_ns_per_op": 4626.035,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 7,
+        "live_allocations": 1024,
+        "queries": 100000,
+        "allocate_ns_per_op": 4644.619,
+        "hit_ns_per_op": 1411.179,
+        "miss_ns_per_op": 3292.163,
+        "resize_ns_per_op": 1303.349,
+        "free_ns_per_op": 5655.802,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 0,
+        "live_allocations": 8192,
+        "queries": 100000,
+        "allocate_ns_per_op": 4704.81,
+        "hit_ns_per_op": 16374.877,
+        "miss_ns_per_op": 35166.359,
+        "resize_ns_per_op": 15764.392,
+        "free_ns_per_op": 15045.149,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 0,
+        "live_allocations": 8192,
+        "queries": 100000,
+        "allocate_ns_per_op": 4836.552,
+        "hit_ns_per_op": 43.137,
+        "miss_ns_per_op": 36.951,
+        "resize_ns_per_op": 25.863,
+        "free_ns_per_op": 4821.358,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 1,
+        "live_allocations": 8192,
+        "queries": 100000,
+        "allocate_ns_per_op": 4747.742,
+        "hit_ns_per_op": 39.701,
+        "miss_ns_per_op": 46.931,
+        "resize_ns_per_op": 30.419,
+        "free_ns_per_op": 5030.391,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 1,
+        "live_allocations": 8192,
+        "queries": 100000,
+        "allocate_ns_per_op": 4767.467,
+        "hit_ns_per_op": 16385.616,
+        "miss_ns_per_op": 34929.188,
+        "resize_ns_per_op": 16271.674,
+        "free_ns_per_op": 15275.062,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 2,
+        "live_allocations": 8192,
+        "queries": 100000,
+        "allocate_ns_per_op": 4984.042,
+        "hit_ns_per_op": 16240.55,
+        "miss_ns_per_op": 35042.999,
+        "resize_ns_per_op": 16395.283,
+        "free_ns_per_op": 15285.362,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 2,
+        "live_allocations": 8192,
+        "queries": 100000,
+        "allocate_ns_per_op": 4679.143,
+        "hit_ns_per_op": 40.069,
+        "miss_ns_per_op": 36.632,
+        "resize_ns_per_op": 30.758,
+        "free_ns_per_op": 4673.272,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 3,
+        "live_allocations": 8192,
+        "queries": 100000,
+        "allocate_ns_per_op": 4678.693,
+        "hit_ns_per_op": 34.723,
+        "miss_ns_per_op": 34.752,
+        "resize_ns_per_op": 26.364,
+        "free_ns_per_op": 4260.728,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 3,
+        "live_allocations": 8192,
+        "queries": 100000,
+        "allocate_ns_per_op": 4390.83,
+        "hit_ns_per_op": 16537.833,
+        "miss_ns_per_op": 35378.941,
+        "resize_ns_per_op": 16877.964,
+        "free_ns_per_op": 15291.325,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 4,
+        "live_allocations": 8192,
+        "queries": 100000,
+        "allocate_ns_per_op": 4803.321,
+        "hit_ns_per_op": 16356.826,
+        "miss_ns_per_op": 35347.779,
+        "resize_ns_per_op": 16354.115,
+        "free_ns_per_op": 14436.08,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 4,
+        "live_allocations": 8192,
+        "queries": 100000,
+        "allocate_ns_per_op": 4405.823,
+        "hit_ns_per_op": 35.42,
+        "miss_ns_per_op": 41.634,
+        "resize_ns_per_op": 26.435,
+        "free_ns_per_op": 4326.24,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 5,
+        "live_allocations": 8192,
+        "queries": 100000,
+        "allocate_ns_per_op": 4401.094,
+        "hit_ns_per_op": 37.136,
+        "miss_ns_per_op": 34.825,
+        "resize_ns_per_op": 25.116,
+        "free_ns_per_op": 4478.746,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 5,
+        "live_allocations": 8192,
+        "queries": 100000,
+        "allocate_ns_per_op": 4443.942,
+        "hit_ns_per_op": 16405.195,
+        "miss_ns_per_op": 34848.325,
+        "resize_ns_per_op": 16269.633,
+        "free_ns_per_op": 15256.669,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 6,
+        "live_allocations": 8192,
+        "queries": 100000,
+        "allocate_ns_per_op": 4933.908,
+        "hit_ns_per_op": 16570.192,
+        "miss_ns_per_op": 35103.136,
+        "resize_ns_per_op": 16208.204,
+        "free_ns_per_op": 15621.36,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 6,
+        "live_allocations": 8192,
+        "queries": 100000,
+        "allocate_ns_per_op": 4893.235,
+        "hit_ns_per_op": 41.269,
+        "miss_ns_per_op": 42.043,
+        "resize_ns_per_op": 48.973,
+        "free_ns_per_op": 4558.593,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "after",
+        "repetition": 7,
+        "live_allocations": 8192,
+        "queries": 100000,
+        "allocate_ns_per_op": 4927.506,
+        "hit_ns_per_op": 34.281,
+        "miss_ns_per_op": 50.447,
+        "resize_ns_per_op": 28.14,
+        "free_ns_per_op": 4545.153,
+        "checksum": 1638400000
+      },
+      {
+        "variant": "before",
+        "repetition": 7,
+        "live_allocations": 8192,
+        "queries": 100000,
+        "allocate_ns_per_op": 4686.487,
+        "hit_ns_per_op": 16187.344,
+        "miss_ns_per_op": 34969.35,
+        "resize_ns_per_op": 19169.665,
+        "free_ns_per_op": 17680.434,
+        "checksum": 1638400000
+      }
+    ]
+  },
+  "mixed_small_comparison": {
+    "harness": "memx/bench/allocator_workload.c",
+    "harness_sha256": "13f18fa91c95c9b119b7cdc370a3d7e3995fcc937df8f2ff02cea77633dda9fb",
+    "slots": 100000,
+    "rounds": 3,
+    "operations": 675268,
+    "checksum": 2887,
+    "size_range_bytes": [
+      16,
+      8192
+    ],
+    "scope": "Does not exercise large-index path; regression and competitor check only. MemX allocator APIs compiled from same workload source; system and mimalloc use the exact same workload executable.",
+    "mimalloc": {
+      "revision": "cd69707c3ca01a4c5fb358e8b92a710554f15356",
+      "version": "3.5.0",
+      "source_worktree": "clean",
+      "library": "memx/build-current-mimalloc/libmimalloc.so.3.5",
+      "sha256": "d773210ba939d934defb2c93c8749f3622240b96a868d96fa4e91f95bd131281",
+      "build": "GNU 16.2.1, Release -O3 -DNDEBUG, MI_OVERRIDE=ON, MI_SECURE=OFF, MI_DEBUG_FULL=OFF, shared library",
+      "override_verification": "LD_DEBUG=bindings confirmed malloc/calloc/realloc/free in workload resolved to this mimalloc library; verification run not timed."
+    },
+    "api_contracts": {
+      "before": "Conventional unchecked MemX free/realloc, baseline heap",
+      "after": "Conventional unchecked MemX free/realloc, candidate heap",
+      "checked": "Candidate MemX checked free/realloc sensitivity result",
+      "glibc": "System malloc/realloc/free",
+      "mimalloc": "Same system workload with mimalloc preload; slot/order bookkeeping also uses selected malloc implementation."
+    },
+    "repetitions": 15,
+    "warmups": 1,
+    "run_order": "Rotating five-variant order [before, after, checked, glibc, mimalloc]; start index repetition modulo 5; repetition 0 excluded.",
+    "commands": [
+      "taskset -c 2 memx/build-improve-before/memx_heap_workload 100000 3",
+      "taskset -c 2 memx/build-current/memx_heap_workload 100000 3",
+      "taskset -c 2 memx/build-current/memx_heap_workload_checked 100000 3",
+      "taskset -c 2 memx/build-current/memx_allocator_workload 100000 3",
+      "env LD_PRELOAD=/home/raze/projects/lowlowlow/memx/build-current-mimalloc/libmimalloc.so.3.5 taskset -c 2 memx/build-current/memx_allocator_workload 100000 3"
+    ],
+    "summary": [
+      {
+        "variant": "before",
+        "median": 193.279,
+        "mad": 6.826999999999998,
+        "min": 178.899,
+        "max": 211.26,
+        "raw": [
+          202.897,
+          204.817,
+          193.279,
+          200.854,
+          178.899,
+          190.92,
+          181.176,
+          190.562,
+          197.627,
+          189.41,
+          186.452,
+          200.522,
+          197.276,
+          211.26,
+          190.414
+        ]
+      },
+      {
+        "variant": "after",
+        "median": 198.229,
+        "mad": 6.7879999999999825,
+        "min": 176.049,
+        "max": 209.359,
+        "raw": [
+          203.346,
+          199.559,
+          200.784,
+          176.049,
+          195.637,
+          186.457,
+          183.457,
+          179.926,
+          176.999,
+          202.613,
+          209.359,
+          186.032,
+          198.229,
+          204.679,
+          205.017
+        ]
+      },
+      {
+        "variant": "checked",
+        "median": 217.829,
+        "mad": 11.73399999999998,
+        "min": 198.593,
+        "max": 242.082,
+        "raw": [
+          217.829,
+          234.589,
+          216.447,
+          198.593,
+          210.631,
+          201.447,
+          212.133,
+          229.563,
+          242.082,
+          204.301,
+          228.874,
+          211.6,
+          239.38,
+          220.318,
+          241.257
+        ]
+      },
+      {
+        "variant": "glibc",
+        "median": 335.795,
+        "mad": 11.689999999999998,
+        "min": 306.655,
+        "max": 359.486,
+        "raw": [
+          322.43,
+          351.254,
+          359.486,
+          306.655,
+          343.894,
+          337.375,
+          307.837,
+          335.293,
+          335.795,
+          311.02,
+          334.224,
+          347.485,
+          325.945,
+          339.225,
+          358.384
+        ]
+      },
+      {
+        "variant": "mimalloc",
+        "median": 103.028,
+        "mad": 11.870000000000005,
+        "min": 86.054,
+        "max": 620.895,
+        "raw": [
+          497.374,
+          589.859,
+          620.895,
+          109.88,
+          415.258,
+          120.014,
+          93.358,
+          95.607,
+          92.778,
+          394.741,
+          103.028,
+          97.665,
+          86.054,
+          91.158,
+          94.379
+        ]
+      }
+    ],
+    "raw_samples": [
+      {
+        "variant": "before",
+        "repetition": 0,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 127421823,
+        "ns_per_operation": 188.698,
+        "checksum": 2887
+      },
+      {
+        "variant": "after",
+        "repetition": 0,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 122514290,
+        "ns_per_operation": 181.431,
+        "checksum": 2887
+      },
+      {
+        "variant": "checked",
+        "repetition": 0,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 147792321,
+        "ns_per_operation": 218.865,
+        "checksum": 2887
+      },
+      {
+        "variant": "glibc",
+        "repetition": 0,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 231428292,
+        "ns_per_operation": 342.721,
+        "checksum": 2887
+      },
+      {
+        "variant": "mimalloc",
+        "repetition": 0,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 352903823,
+        "ns_per_operation": 522.613,
+        "checksum": 2887
+      },
+      {
+        "variant": "after",
+        "repetition": 1,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 137313211,
+        "ns_per_operation": 203.346,
+        "checksum": 2887
+      },
+      {
+        "variant": "checked",
+        "repetition": 1,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 147092829,
+        "ns_per_operation": 217.829,
+        "checksum": 2887
+      },
+      {
+        "variant": "glibc",
+        "repetition": 1,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 217726800,
+        "ns_per_operation": 322.43,
+        "checksum": 2887
+      },
+      {
+        "variant": "mimalloc",
+        "repetition": 1,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 335860511,
+        "ns_per_operation": 497.374,
+        "checksum": 2887
+      },
+      {
+        "variant": "before",
+        "repetition": 1,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 137010086,
+        "ns_per_operation": 202.897,
+        "checksum": 2887
+      },
+      {
+        "variant": "checked",
+        "repetition": 2,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 158410695,
+        "ns_per_operation": 234.589,
+        "checksum": 2887
+      },
+      {
+        "variant": "glibc",
+        "repetition": 2,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 237190315,
+        "ns_per_operation": 351.254,
+        "checksum": 2887
+      },
+      {
+        "variant": "mimalloc",
+        "repetition": 2,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 398313024,
+        "ns_per_operation": 589.859,
+        "checksum": 2887
+      },
+      {
+        "variant": "before",
+        "repetition": 2,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 138306437,
+        "ns_per_operation": 204.817,
+        "checksum": 2887
+      },
+      {
+        "variant": "after",
+        "repetition": 2,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 134755494,
+        "ns_per_operation": 199.559,
+        "checksum": 2887
+      },
+      {
+        "variant": "glibc",
+        "repetition": 3,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 242749169,
+        "ns_per_operation": 359.486,
+        "checksum": 2887
+      },
+      {
+        "variant": "mimalloc",
+        "repetition": 3,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 419270802,
+        "ns_per_operation": 620.895,
+        "checksum": 2887
+      },
+      {
+        "variant": "before",
+        "repetition": 3,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 130514995,
+        "ns_per_operation": 193.279,
+        "checksum": 2887
+      },
+      {
+        "variant": "after",
+        "repetition": 3,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 135582703,
+        "ns_per_operation": 200.784,
+        "checksum": 2887
+      },
+      {
+        "variant": "checked",
+        "repetition": 3,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 146159554,
+        "ns_per_operation": 216.447,
+        "checksum": 2887
+      },
+      {
+        "variant": "mimalloc",
+        "repetition": 4,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 74198324,
+        "ns_per_operation": 109.88,
+        "checksum": 2887
+      },
+      {
+        "variant": "before",
+        "repetition": 4,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 135630616,
+        "ns_per_operation": 200.854,
+        "checksum": 2887
+      },
+      {
+        "variant": "after",
+        "repetition": 4,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 118880121,
+        "ns_per_operation": 176.049,
+        "checksum": 2887
+      },
+      {
+        "variant": "checked",
+        "repetition": 4,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 134103213,
+        "ns_per_operation": 198.593,
+        "checksum": 2887
+      },
+      {
+        "variant": "glibc",
+        "repetition": 4,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 207074357,
+        "ns_per_operation": 306.655,
+        "checksum": 2887
+      },
+      {
+        "variant": "before",
+        "repetition": 5,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 120804722,
+        "ns_per_operation": 178.899,
+        "checksum": 2887
+      },
+      {
+        "variant": "after",
+        "repetition": 5,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 132107408,
+        "ns_per_operation": 195.637,
+        "checksum": 2887
+      },
+      {
+        "variant": "checked",
+        "repetition": 5,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 142232533,
+        "ns_per_operation": 210.631,
+        "checksum": 2887
+      },
+      {
+        "variant": "glibc",
+        "repetition": 5,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 232220586,
+        "ns_per_operation": 343.894,
+        "checksum": 2887
+      },
+      {
+        "variant": "mimalloc",
+        "repetition": 5,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 280410404,
+        "ns_per_operation": 415.258,
+        "checksum": 2887
+      },
+      {
+        "variant": "after",
+        "repetition": 6,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 125908623,
+        "ns_per_operation": 186.457,
+        "checksum": 2887
+      },
+      {
+        "variant": "checked",
+        "repetition": 6,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 136030466,
+        "ns_per_operation": 201.447,
+        "checksum": 2887
+      },
+      {
+        "variant": "glibc",
+        "repetition": 6,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 227818246,
+        "ns_per_operation": 337.375,
+        "checksum": 2887
+      },
+      {
+        "variant": "mimalloc",
+        "repetition": 6,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 81041426,
+        "ns_per_operation": 120.014,
+        "checksum": 2887
+      },
+      {
+        "variant": "before",
+        "repetition": 6,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 128922259,
+        "ns_per_operation": 190.92,
+        "checksum": 2887
+      },
+      {
+        "variant": "checked",
+        "repetition": 7,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 143246577,
+        "ns_per_operation": 212.133,
+        "checksum": 2887
+      },
+      {
+        "variant": "glibc",
+        "repetition": 7,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 207872146,
+        "ns_per_operation": 307.837,
+        "checksum": 2887
+      },
+      {
+        "variant": "mimalloc",
+        "repetition": 7,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 63041694,
+        "ns_per_operation": 93.358,
+        "checksum": 2887
+      },
+      {
+        "variant": "before",
+        "repetition": 7,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 122342060,
+        "ns_per_operation": 181.176,
+        "checksum": 2887
+      },
+      {
+        "variant": "after",
+        "repetition": 7,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 123882386,
+        "ns_per_operation": 183.457,
+        "checksum": 2887
+      },
+      {
+        "variant": "glibc",
+        "repetition": 8,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 226412359,
+        "ns_per_operation": 335.293,
+        "checksum": 2887
+      },
+      {
+        "variant": "mimalloc",
+        "repetition": 8,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 64560555,
+        "ns_per_operation": 95.607,
+        "checksum": 2887
+      },
+      {
+        "variant": "before",
+        "repetition": 8,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 128680131,
+        "ns_per_operation": 190.562,
+        "checksum": 2887
+      },
+      {
+        "variant": "after",
+        "repetition": 8,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 121498227,
+        "ns_per_operation": 179.926,
+        "checksum": 2887
+      },
+      {
+        "variant": "checked",
+        "repetition": 8,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 155016328,
+        "ns_per_operation": 229.563,
+        "checksum": 2887
+      },
+      {
+        "variant": "mimalloc",
+        "repetition": 9,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 62649790,
+        "ns_per_operation": 92.778,
+        "checksum": 2887
+      },
+      {
+        "variant": "before",
+        "repetition": 9,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 133451317,
+        "ns_per_operation": 197.627,
+        "checksum": 2887
+      },
+      {
+        "variant": "after",
+        "repetition": 9,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 119521508,
+        "ns_per_operation": 176.999,
+        "checksum": 2887
+      },
+      {
+        "variant": "checked",
+        "repetition": 9,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 163470549,
+        "ns_per_operation": 242.082,
+        "checksum": 2887
+      },
+      {
+        "variant": "glibc",
+        "repetition": 9,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 226751616,
+        "ns_per_operation": 335.795,
+        "checksum": 2887
+      },
+      {
+        "variant": "before",
+        "repetition": 10,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 127902225,
+        "ns_per_operation": 189.41,
+        "checksum": 2887
+      },
+      {
+        "variant": "after",
+        "repetition": 10,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 136818073,
+        "ns_per_operation": 202.613,
+        "checksum": 2887
+      },
+      {
+        "variant": "checked",
+        "repetition": 10,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 137957844,
+        "ns_per_operation": 204.301,
+        "checksum": 2887
+      },
+      {
+        "variant": "glibc",
+        "repetition": 10,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 210021703,
+        "ns_per_operation": 311.02,
+        "checksum": 2887
+      },
+      {
+        "variant": "mimalloc",
+        "repetition": 10,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 266556277,
+        "ns_per_operation": 394.741,
+        "checksum": 2887
+      },
+      {
+        "variant": "after",
+        "repetition": 11,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 141373446,
+        "ns_per_operation": 209.359,
+        "checksum": 2887
+      },
+      {
+        "variant": "checked",
+        "repetition": 11,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 154551620,
+        "ns_per_operation": 228.874,
+        "checksum": 2887
+      },
+      {
+        "variant": "glibc",
+        "repetition": 11,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 225691038,
+        "ns_per_operation": 334.224,
+        "checksum": 2887
+      },
+      {
+        "variant": "mimalloc",
+        "repetition": 11,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 69571227,
+        "ns_per_operation": 103.028,
+        "checksum": 2887
+      },
+      {
+        "variant": "before",
+        "repetition": 11,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 125904738,
+        "ns_per_operation": 186.452,
+        "checksum": 2887
+      },
+      {
+        "variant": "checked",
+        "repetition": 12,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 142886696,
+        "ns_per_operation": 211.6,
+        "checksum": 2887
+      },
+      {
+        "variant": "glibc",
+        "repetition": 12,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 234645444,
+        "ns_per_operation": 347.485,
+        "checksum": 2887
+      },
+      {
+        "variant": "mimalloc",
+        "repetition": 12,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 65950125,
+        "ns_per_operation": 97.665,
+        "checksum": 2887
+      },
+      {
+        "variant": "before",
+        "repetition": 12,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 135405835,
+        "ns_per_operation": 200.522,
+        "checksum": 2887
+      },
+      {
+        "variant": "after",
+        "repetition": 12,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 125621714,
+        "ns_per_operation": 186.032,
+        "checksum": 2887
+      },
+      {
+        "variant": "glibc",
+        "repetition": 13,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 220100143,
+        "ns_per_operation": 325.945,
+        "checksum": 2887
+      },
+      {
+        "variant": "mimalloc",
+        "repetition": 13,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 58109353,
+        "ns_per_operation": 86.054,
+        "checksum": 2887
+      },
+      {
+        "variant": "before",
+        "repetition": 13,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 133213995,
+        "ns_per_operation": 197.276,
+        "checksum": 2887
+      },
+      {
+        "variant": "after",
+        "repetition": 13,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 133857996,
+        "ns_per_operation": 198.229,
+        "checksum": 2887
+      },
+      {
+        "variant": "checked",
+        "repetition": 13,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 161645528,
+        "ns_per_operation": 239.38,
+        "checksum": 2887
+      },
+      {
+        "variant": "mimalloc",
+        "repetition": 14,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 61556030,
+        "ns_per_operation": 91.158,
+        "checksum": 2887
+      },
+      {
+        "variant": "before",
+        "repetition": 14,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 142657128,
+        "ns_per_operation": 211.26,
+        "checksum": 2887
+      },
+      {
+        "variant": "after",
+        "repetition": 14,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 138213203,
+        "ns_per_operation": 204.679,
+        "checksum": 2887
+      },
+      {
+        "variant": "checked",
+        "repetition": 14,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 148773729,
+        "ns_per_operation": 220.318,
+        "checksum": 2887
+      },
+      {
+        "variant": "glibc",
+        "repetition": 14,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 229068000,
+        "ns_per_operation": 339.225,
+        "checksum": 2887
+      },
+      {
+        "variant": "before",
+        "repetition": 15,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 128580377,
+        "ns_per_operation": 190.414,
+        "checksum": 2887
+      },
+      {
+        "variant": "after",
+        "repetition": 15,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 138441288,
+        "ns_per_operation": 205.017,
+        "checksum": 2887
+      },
+      {
+        "variant": "checked",
+        "repetition": 15,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 162912798,
+        "ns_per_operation": 241.257,
+        "checksum": 2887
+      },
+      {
+        "variant": "glibc",
+        "repetition": 15,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 242005258,
+        "ns_per_operation": 358.384,
+        "checksum": 2887
+      },
+      {
+        "variant": "mimalloc",
+        "repetition": 15,
+        "slots": 100000,
+        "rounds": 3,
+        "operations": 675268,
+        "elapsed_ns": 63731384,
+        "ns_per_operation": 94.379,
+        "checksum": 2887
+      }
+    ],
+    "candidate_over_mimalloc_median_latency": 1.9240303606786504,
+    "candidate_over_baseline_median_latency": 1.0256106457504437,
+    "interpretation": "Candidate is slower than mimalloc at the median in this workload. Mimalloc is highly variable/bimodal (86.054..620.895 ns/op), so do not infer a universal ratio. Candidate vs baseline median difference is within each run set's MAD; no proven small-path improvement."
+  },
+  "validation": {
+    "gcc_x86_64": "8/8 CTest passed",
+    "clang_asan_ubsan": "8/8 passed outside sandbox with leak detection enabled",
+    "clang_tsan": "memx_heap_test passed outside sandbox including new concurrent large churn",
+    "gcc_x86_32": "8/8 passed outside sandbox; initial sandbox run SIGSYS is excluded as environment restriction",
+    "qemu_mips32": "8/8 CTest passed; Python tool test runs on host",
+    "qemu_ppc64le": "8/8 CTest passed; Python tool test runs on host",
+    "qemu_sparc64": "8/8 CTest passed; Python tool test runs on host",
+    "fault_injection": "calloc first table, growth, realloc metadata and growth failure preservation/recovery, shrink failure and final release"
+  },
+  "limitations": [
+    "One host, uncontrolled frequency/thermals/background activity; no confidence intervals or per-operation p95/p99 claims.",
+    "Single deterministic lookup permutation; no cold-cache, adversarial collision, allocator fragmentation/RSS, application trace, or multithread performance claim.",
+    "Population 1 allocation/resize/free measures one operation per process and is noisy; its resize median regressed.",
+    "Population 1024 allocation median regressed approximately 4.7%; retain it rather than claiming every phase wins.",
+    "Separate chaining is expected constant-time with good distribution, not worst-case constant-time. Resize still holds heap mutex.",
+    "The stats struct has an added field; callers must be rebuilt with the experimental library.",
+    "Discord roadmap is future scope; no libc-free runtime or Discord implementation delivered."
+  ],
+  "independent_reviews": {
+    "correctness": "PASS: hash invariants, lock discipline, cleanup and accounting",
+    "edge_cases": "PASS: independent fault-injection test and audit",
+    "benchmark": "PASS: recomputed phase statistics and checked source/object/binary hashes, scope and relocation links"
+  }
+}
