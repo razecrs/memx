@@ -16,7 +16,8 @@
     "execution": "Native outside sandbox; no QEMU; timing phases sequential, no concurrent compilation or tests launched by this agent."
   },
   "provenance": {
-    "baseline_commit": "3caa77c67d3d3a87858f3bd82ba48c007ed7285a",
+    "baseline_commit": "387ce66b7d80d1b3c8eee992d58578af8002fcdd",
+    "baseline_heap_also_identical_to_commit": "3caa77c67d3d3a87858f3bd82ba48c007ed7285a",
     "baseline_heap_source_path_at_commit": "src/allocator/heap.c",
     "baseline_heap_sha256": "fe02370dc47ca9a7743c46cc50bb858d4083ed949f4fd64cd715d00bc05856bb",
     "candidate_heap_source_path": "memx/src/allocator/heap.c",
