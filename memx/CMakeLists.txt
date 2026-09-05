@@ -165,6 +165,26 @@ if(MEMX_BUILD_TESTS)
         target_compile_features(memx_heap_test PRIVATE c_std_17)
         memx_target_warnings(memx_heap_test)
         add_test(NAME memx_heap_test COMMAND memx_heap_test)
+        add_executable(memx_cache_bounds_test
+            tests/test_cache_bounds.c src/allocator/os_linux.c)
+        target_link_libraries(memx_cache_bounds_test PRIVATE memx Threads::Threads)
+        target_compile_features(memx_cache_bounds_test PRIVATE c_std_17)
+        memx_target_warnings(memx_cache_bounds_test)
+        add_test(NAME memx_cache_bounds_test COMMAND memx_cache_bounds_test)
+
+        add_executable(memx_thp_concurrency_test tests/test_thp_concurrency.c)
+        target_link_libraries(memx_thp_concurrency_test PRIVATE memx_heap Threads::Threads)
+        target_compile_features(memx_thp_concurrency_test PRIVATE c_std_17)
+        memx_target_warnings(memx_thp_concurrency_test)
+        add_test(NAME memx_thp_concurrency_test COMMAND memx_thp_concurrency_test)
+
+        add_executable(memx_malloc_shim_test tests/test_malloc_shim.c)
+        target_link_libraries(memx_malloc_shim_test PRIVATE memx_heap Threads::Threads)
+        target_compile_features(memx_malloc_shim_test PRIVATE c_std_17)
+        memx_target_warnings(memx_malloc_shim_test)
+        add_test(NAME memx_malloc_shim_test COMMAND memx_malloc_shim_test)
+        set_tests_properties(memx_cache_bounds_test memx_thp_concurrency_test
+            memx_malloc_shim_test PROPERTIES TIMEOUT 120)
         if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
             AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang"
             AND NOT BUILD_SHARED_LIBS)
@@ -241,6 +261,59 @@ if(MEMX_BUILD_BENCHMARKS)
             target_compile_options(memx_heap_workload_checked PRIVATE -O3)
         endif()
         memx_target_warnings(memx_heap_workload_checked)
+
+        # Multi-shape single-threaded comparison. The system build exists so a
+        # competitor can be LD_PRELOADed into the identical binary.
+        add_executable(memx_pattern_bench bench/allocator_patterns.c)
+        target_compile_definitions(memx_pattern_bench PRIVATE
+            MEMX_PATTERNS_USE_MEMX_HEAP=1)
+        target_link_libraries(memx_pattern_bench PRIVATE
+            memx_heap Threads::Threads)
+        target_compile_features(memx_pattern_bench PRIVATE c_std_17)
+        if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+            target_compile_options(memx_pattern_bench PRIVATE -O3)
+        endif()
+        memx_target_warnings(memx_pattern_bench)
+
+        add_executable(memx_pattern_bench_system bench/allocator_patterns.c)
+        target_compile_features(memx_pattern_bench_system PRIVATE c_std_17)
+        if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+            target_compile_options(memx_pattern_bench_system PRIVATE -O3)
+        endif()
+        memx_target_warnings(memx_pattern_bench_system)
+
+        # Benchmark-only malloc interposer, so MemX can be measured through the
+        # same LD_PRELOAD path as snmalloc and mimalloc.
+        if(UNIX AND NOT APPLE)
+            # Compiled from sources rather than linked against the static
+            # library, so the shared object stays position independent without
+            # forcing PIC on the library targets.
+            add_library(memx_malloc_shim SHARED
+                bench/memx_malloc_shim.c
+                src/memx.c
+                src/allocator/heap.c
+                src/allocator/os_linux.c)
+            target_include_directories(memx_malloc_shim
+                PRIVATE include src/allocator)
+            target_link_libraries(memx_malloc_shim PRIVATE Threads::Threads)
+            target_compile_features(memx_malloc_shim PRIVATE c_std_17)
+            set_target_properties(memx_malloc_shim PROPERTIES
+                POSITION_INDEPENDENT_CODE ON)
+            if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+                target_compile_options(memx_malloc_shim PRIVATE -O3)
+            endif()
+            memx_target_warnings(memx_malloc_shim)
+            # The white-box shim test above works with sanitizers. Actual
+            # LD_PRELOAD interposition must not replace sanitizer allocators.
+            if(MEMX_BUILD_TESTS AND NOT MEMX_ENABLE_ASAN
+                AND NOT MEMX_ENABLE_UBSAN AND NOT MEMX_ENABLE_TSAN
+                AND NOT CMAKE_CROSSCOMPILING)
+                add_test(NAME memx_compare_allocators_test
+                    COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_compare_allocators.sh
+                        $<TARGET_FILE_DIR:memx_pattern_bench_system>)
+                set_tests_properties(memx_compare_allocators_test PROPERTIES TIMEOUT 120)
+            endif()
+        endif()
 
         add_executable(memx_heap_bench bench/heap_bench.c)
         target_link_libraries(memx_heap_bench PRIVATE memx_heap Threads::Threads)

@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "date": "2026-09-05",
+  "purpose": "Correctness regression verification, not a performance ranking",
+  "platform": "Linux x86_64 native",
+  "source_state": "Uncommitted working tree including user improvements and review fixes",
+  "fixes": [
+    "Atomic THP probe result publication in the index and heap; no spinning initializer dependency",
+    "Bootstrap allocation checked bounds, non-wrapping CAS reservations, and recorded allocation sizes",
+    "Bootstrap realloc copies only min(old requested size, new size)",
+    "Distinct aligned_alloc size-multiple contract and arbitrary-size posix_memalign/memalign paths",
+    "Combined local/spare cache ceiling enforced for refills, local frees, and remote drains",
+    "Failed or malformed benchmark samples and loader diagnostics rejected; operations/checksums cross-validated"
+  ],
+  "test_runs": [
+    {
+      "compiler": "GCC 16.2.1 20260819",
+      "profile": "Release, strict warnings as errors",
+      "build_directory": "/tmp/memx-user-review",
+      "passed": 12,
+      "failed": 0
+    },
+    {
+      "compiler": "Clang 22.1.8",
+      "profile": "Debug, strict warnings as errors, ASan and UBSan",
+      "build_directory": "/tmp/memx-user-review-clang",
+      "passed": 11,
+      "failed": 0
+    },
+    {
+      "compiler": "Clang 22.1.8",
+      "profile": "Debug, strict warnings as errors, TSan",
+      "build_directory": "/tmp/memx-fix-tsan",
+      "passed": 11,
+      "failed": 0
+    }
+  ],
+  "sanitizer_test_difference": "Actual LD_PRELOAD comparison excluded to avoid replacing sanitizer allocators; renamed-entry-point shim regression remains enabled",
+  "cache_regression": {
+    "limits": [2, 3, 17, 255, 256, 257],
+    "batches": [1, 16, 256, 1024],
+    "allocation_sizes": [16, 24, 192, 8192],
+    "live_objects": 513,
+    "checks": ["combined ceiling after operations", "list counts and tails", "remote drain", "detach returns all carved blocks"]
+  },
+  "comparison_smoke": {
+    "allocators": ["memx", "mimalloc", "glibc"],
+    "live_objects": 1024,
+    "rounds": 2,
+    "samples": 3,
+    "patterns": ["mixed", "small", "large", "lifo", "fifo", "churn", "realloc"],
+    "all_exit_statuses_successful": true,
+    "operations_and_checksums_match": true,
+    "performance_conclusion": null,
+    "limitations": ["Short unpinned smoke runs", "No full competitor or architecture sweep"]
+  },
+  "independent_review": {
+    "judge_correctness": "No remaining concrete blocker in reviewed fixes",
+    "edge_hunter": "PASS for requested fixes after parser and test cleanup corrections",
+    "judge_bench_api": "PASS, limited to reviewed correctness and harness behavior"
+  },
+  "source_sha256": {
+    "src/memx.c": "28419f1bfb4629b88de97a57222737f96289c436641d475703f70ee6cc61d1c9",
+    "src/allocator/os_linux.c": "8a0e7d93a47b148eba0b40bb88c20fbb5052419a4627bad578d3ba8d3a9b2a9e",
+    "src/allocator/heap.c": "321f42493b9d03dde004cd15c176b57e0fd155e1ecb59fcae7df349031dc0ef3",
+    "bench/memx_malloc_shim.c": "e37b7e1c70673e3d028b33ca1400755aeb8f2aadd9b53779233b46c5619163c3",
+    "tools/compare_allocators.sh": "0daa6748a4d871413ed951da2a9301d6915db0861fd5e9a1e198fca59d626a67",
+    "bench/allocator_patterns.c": "2a9ae53b024c0958b9e032e04fe475902c3c485e01323c18d55d05f7664648c0"
+  },
+  "remaining_scope_limits": [
+    "Benchmark-only interposer; bootstrap allocations are not reclaimed",
+    "Pending remote-free queues remain unbounded until drained",
+    "No claim of production readiness or superiority over competitors",
+    "No commits, pushes, or releases performed for this fix"
+  ]
+}
